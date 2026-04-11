@@ -1,0 +1,4 @@
+[build]
+builder = "nixpacks"
+
+# Railway will detect the three services from railway.toml sections below

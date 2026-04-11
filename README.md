@@ -2,68 +2,47 @@
 
 **The Stealth Standard for Modern Prop Trading**
 
-Copy trading platform where each connected trading account routes API calls through a dedicated residential proxy IP. Master trader signals replicate to unlimited follower accounts with per-account IP isolation.
+Copy trading platform with dedicated residential proxy IP isolation per account. Master trader signals replicate to unlimited follower accounts. Each connection routes through its own unique IP.
+
+## Quick Start
+
+```bash
+# API server
+cd api && cp .env.example .env
+npm install && npm run migrate && npm run dev
+
+# Web dashboard
+cd web && cp .env.example .env.local
+npm install && npm run dev
+```
+
+## Railway Deployment
+
+Three services from one repo:
+
+| Service | Root Dir | Build | Start |
+|---------|----------|-------|-------|
+| API | `/api` | `npm install` | `npm run migrate && npm start` |
+| Web | `/web` | `npm install && npm run build` | `npm start` |
+| PostgreSQL | - | Railway managed | - |
 
 ## Architecture
 
-- **Dashboard**: React (JSX) single-file app with 7 pages (Overview, Accounts, IP Mixer, Trade Log, Settings, Profile, Onboarding)
-- **Backend**: Node.js/Express with PostgreSQL
-- **Brokers**: Tradovate (OAuth/WebSocket), TopStepX/ProjectX (JWT/SignalR), Rithmic (Protobuf), NinjaTrader
-- **Proxies**: Residential proxy pool (BrightData, Oxylabs, SmartProxy, IPRoyal) with sticky sessions per account
-- **Billing**: Stripe subscription with three tiers (Basic $39, Pro $69, Pro+ $89)
-- **Invoices**: Python/reportlab PDF generator matched to dashboard dark theme
+- **API**: Express, PostgreSQL, JWT + API key auth, Stripe billing, plan-gated middleware
+- **Web**: Next.js 14, React dashboard with 7 pages + onboarding
+- **Brokers**: Tradovate (OAuth/WebSocket), TopStepX (JWT/SignalR), Rithmic, NinjaTrader
+- **Proxies**: BrightData, Oxylabs, SmartProxy, IPRoyal with sticky sessions
 
 ## Plans
 
-| Feature | Basic | Pro | Pro+ |
+| | Basic $39 | Pro $69 | Pro+ $89 |
 |---|---|---|---|
-| Follower accounts | 5 | Unlimited | Unlimited |
-| Proxy providers | 1 | All | All |
-| Per-follower overrides | No | Yes | Yes |
-| Custom proxy pools | No | No | Yes |
-| REST API access | No | No | Yes |
-| Webhook integrations | No | No | Yes |
-| SLA guarantee | No | No | Yes |
-
-## Project Structure
-
-```
-phantom-copy/
-  src/
-    dashboard/
-      App.jsx              # Full interactive dashboard (React)
-    backend/
-      listeners/
-        tradovate-listener.js   # Tradovate + Rithmic master listener + copy executor
-        projectx-listener.js    # TopStepX/ProjectX SignalR listener + copy client
-      services/
-        proplus-services.js     # Custom Proxy Pools, API Keys, Webhooks
-  docs/
-    backend-architecture.md     # Full backend architecture spec
-  invoices/
-    generator.py                # Branded PDF invoice generator
-    invoice-INV-0047.pdf        # Sample: standard monthly
-    invoice-INV-0048-upgrade.pdf # Sample: upgrade proration
-    invoice-INV-0042-with-tax.pdf # Sample: multi-line + tax
-```
-
-## Broker Integrations
-
-### Tradovate
-OAuth flow, WebSocket listener, position delta detection, bracket replication, token refresh at 85min.
-
-### TopStepX (ProjectX Gateway)
-JWT auth via `POST /api/Auth/loginKey`, SignalR User Hub for real-time events (`GatewayUserPosition`, `GatewayUserOrder`, `GatewayUserTrade`), REST order placement via `POST /api/Order/place`. Token refresh at 23h.
-
-### Rithmic
-R|Protocol/Protobuf WebSocket, referenced in architecture but listener uses similar pattern to Tradovate.
-
-## Connect Flow
-1. **Platform** - Select broker (Tradovate, TopStepX, Rithmic, NinjaTrader)
-2. **Authenticate** - Broker-specific auth (OAuth, API key, credentials)
-3. **IP** - Assign dedicated residential proxy
-4. **Account** - Select which broker account to listen on (master only)
-5. **Launch** - 6-stage boot sequence with live log
+| Followers | 5 | Unlimited | Unlimited |
+| Providers | 1 | All | All |
+| Overrides | - | Yes | Yes |
+| Custom Pools | - | - | Yes |
+| REST API | - | - | Yes |
+| Webhooks | - | - | Yes |
 
 ## License
 
