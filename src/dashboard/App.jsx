@@ -36,6 +36,21 @@ const INITIAL_TRADES = [];
 const cn = (...c) => c.filter(Boolean).join(" ");
 const fmt = (n) => (n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}`);
 
+// ─── API Helper (token-based auth) ──────────────────────────────────────────
+const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
+
+function apiFetch(path, options = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("pc_token") : null;
+  return fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+};
+
 function AnimNum({ value, prefix = "", suffix = "", dec = 2 }) {
   const [d, setD] = useState(value);
   const r = useRef(value);
@@ -2290,20 +2305,6 @@ function AuthScreen({ onAuth }) {
 }
 
 // ─── App Root ────────────────────────────────────────────────────────────────
-const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
-
-function apiFetch(path, options = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("pc_token") : null;
-  return fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-}
-
 export default function App() {
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(null);
