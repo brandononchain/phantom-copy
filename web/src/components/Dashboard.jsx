@@ -123,7 +123,7 @@ function Sidebar({ active, onNav, masterAccount, listenerState, currentPlan }) {
   return (
     <nav className="sidebar">
       <div className="s-logo">
-        <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="8" fill="url(#lg)" /><path d="M10 16h4l2-5 4 10 2-5h4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><defs><linearGradient id="lg" x1="2" y1="2" x2="30" y2="30"><stop stopColor="#6366F1"/><stop offset="1" stopColor="#00E5A0"/></linearGradient></defs></svg>
+        <img src="/logo.png" alt="Phantom Copy" width="28" height="28" style={{ borderRadius: 6 }} />
         <span className="s-logo-t">Phantom Copy</span>
       </div>
       <div className="s-nav">
@@ -1875,7 +1875,7 @@ function OnboardingOverlay({ onComplete }) {
           {/* Step Icon */}
           <div className="onb-icon-wrap">
             {s.icon === "logo" && (
-              <svg width="48" height="48" viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="8" fill="url(#olg)" /><path d="M10 16h4l2-5 4 10 2-5h4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><defs><linearGradient id="olg" x1="2" y1="2" x2="30" y2="30"><stop stopColor="#6366F1"/><stop offset="1" stopColor="#00E5A0"/></linearGradient></defs></svg>
+              <img src="/logo.png" alt="Phantom Copy" width="48" height="48" style={{ borderRadius: 10 }} />
             )}
             {s.icon === "flow" && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M2 12h20"/><path d="M12 2c2.5 3 4 6.5 4 10s-1.5 7-4 10c-2.5-3-4-6.5-4-10s1.5-7 4-10z"/></svg>
