@@ -32,7 +32,17 @@ router.post('/topstepx/auth', authRequired, async (req, res) => {
     });
     const data = await r.json();
     if (!data.success || data.errorCode !== 0) {
-      return res.status(401).json({ error: 'auth_failed', message: data.errorMessage || 'Invalid username or API key' });
+      const errorMessages = {
+        1: 'Server error on ProjectX. Try again in a moment.',
+        2: 'Account locked or disabled. Contact TopStepX support.',
+        3: 'Invalid credentials. Check your username (often your email) and API key.',
+        4: 'API key expired. Generate a new key in your TopStepX dashboard.',
+      };
+      return res.status(401).json({
+        error: 'auth_failed',
+        message: data.errorMessage || errorMessages[data.errorCode] || `ProjectX rejected login (code ${data.errorCode}). Verify your username and API key.`,
+        errorCode: data.errorCode,
+      });
     }
     res.json({ token: data.token, platform: 'topstepx' });
   } catch (err) {
