@@ -66,8 +66,23 @@ const migrations = [
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
+      ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_env_check;
+      ALTER TABLE api_keys ADD CONSTRAINT api_keys_env_check CHECK (env IN ('live','test','signal'));
+      ALTER TABLE api_keys ALTER COLUMN key_prefix TYPE VARCHAR(100);
     `,
     down: `DROP TABLE IF EXISTS notifications, notification_preferences CASCADE;`,
+  },
+  {
+    id: '005_signal_keys',
+    up: `
+      ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_env_check;
+      ALTER TABLE api_keys ADD CONSTRAINT api_keys_env_check CHECK (env IN ('live','test','signal'));
+      ALTER TABLE api_keys ALTER COLUMN key_prefix TYPE VARCHAR(100);
+    `,
+    down: `
+      ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_env_check;
+      ALTER TABLE api_keys ADD CONSTRAINT api_keys_env_check CHECK (env IN ('live','test'));
+    `,
   },
 ];
 
