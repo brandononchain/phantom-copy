@@ -313,6 +313,10 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
   const [authError, setAuthError] = useState(null);
   const [brokerUsername, setBrokerUsername] = useState("");
   const [brokerApiKey, setBrokerApiKey] = useState("");
+  const [brokerMfaCode, setBrokerMfaCode] = useState("");
+  const [brokerMfaPending, setBrokerMfaPending] = useState(false);
+  const [brokerPTicket, setBrokerPTicket] = useState(null);
+  const [brokerDeviceId, setBrokerDeviceId] = useState(null);
   const [brokerToken, setBrokerToken] = useState(null);
   const [brokerEnv, setBrokerEnv] = useState("Rithmic Paper Trading");
   const [role, setRole] = useState(existingMaster ? "follower" : "master");
@@ -382,7 +386,12 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
       if (pid === "topstepx") {
         authBody = { username: brokerUsername, apiKey: brokerApiKey };
       } else if (pid === "tradovate" || pid === "ninjatrader") {
-        authBody = { username: brokerUsername, password: brokerApiKey, environment: "demo" };
+        if (brokerMfaPending && brokerPTicket) {
+          // Step 2: Submit MFA code
+          authBody = { pTicket: brokerPTicket, deviceId: brokerDeviceId, mfaCode: brokerMfaCode, environment: brokerEnv || "demo" };
+        } else {
+          authBody = { username: brokerUsername, password: brokerApiKey, environment: brokerEnv || "demo" };
+        }
       } else if (pid === "rithmic") {
         authBody = { username: brokerUsername, password: brokerApiKey, environment: brokerEnv || "Rithmic Paper Trading" };
       }
@@ -393,12 +402,24 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
         body: JSON.stringify(authBody),
       });
       const authData = await authRes.json();
-      if (!authRes.ok) throw new Error(authData.message || authData.error || "Authentication failed");
+      if (!authRes.ok) {
+        // Check if it's an MFA challenge
+        if (authData.mfaRequired && authData.pTicket) {
+          setBrokerPTicket(authData.pTicket);
+          setBrokerDeviceId(authData.deviceId);
+          setBrokerMfaPending(true);
+          setAuthState("idle");
+          setAuthError(null);
+          return; // Wait for user to enter MFA code
+        }
+        throw new Error(authData.message || authData.error || "Authentication failed");
+      }
       setBrokerToken(authData.token);
+      setBrokerMfaPending(false);
 
       // Step 2: Fetch accounts
       acctBody = { token: authData.token };
-      if (pid === "tradovate" || pid === "ninjatrader") acctBody.environment = "demo";
+      if (pid === "tradovate" || pid === "ninjatrader") acctBody.environment = brokerEnv || "demo";
       if (pid === "rithmic") acctBody.username = brokerUsername;
 
       const acctRes = await apiFetch(`/api/brokers/${pid}/accounts`, {
@@ -412,6 +433,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
         id: String(a.id),
         name: a.name || a.nickname || `Account ${a.id}`,
         balance: a.balance != null ? `$${Number(a.balance).toLocaleString()}` : "N/A",
+        rawBalance: a.balance,
         type: a.type || (a.simulated ? "Simulation" : a.canTrade ? "Live" : a.active === false ? "Inactive" : "Trading"),
       })));
 
@@ -451,20 +473,58 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
     }, 650);
   };
 
-  const handleFinish = () => {
-    const acc = {
-      id: `acc_${Date.now()}`, label: label || `${platform.name} Account`, platform: platform.name, role,
-      ip: assignedIP.current.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.current.split(".").pop()),
-      proxy: proxyProvider, region: proxyRegion, status: role === "master" ? "copying" : "connected",
-      pnl: 0, trades: 0, latency: Math.floor(Math.random() * 30 + 5),
-      brokerAccountId: selectedBrokerAccount?.id || null,
-    };
-    onConnect(acc);
-    if (role === "master") {
-      // Listener already "booted" in the modal, just signal the parent
-      setTimeout(() => onStartListener?.(), 100);
+  const handleFinish = async () => {
+    // Save account to DB so it persists across sessions
+    try {
+      const saveRes = await apiFetch('/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform: platform.id,
+          role,
+          brokerAccountId: selectedBrokerAccount?.id || null,
+          label: label || `${platform.name} ${selectedBrokerAccount?.name || 'Account'}`,
+          credentials: JSON.stringify({
+            token: brokerToken,
+            username: brokerUsername,
+            brokerAccountId: selectedBrokerAccount?.id,
+          }),
+        }),
+      });
+      const saveData = await saveRes.json();
+      if (!saveRes.ok) throw new Error(saveData.message || saveData.error);
+
+      const acc = {
+        id: saveData.account?.id || `acc_${Date.now()}`,
+        label: label || `${platform.name} ${selectedBrokerAccount?.name || 'Account'}`,
+        platform: platform.name, role,
+        ip: assignedIP.current.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.current.split(".").pop()),
+        proxy: proxyProvider, region: proxyRegion, status: role === "master" ? "copying" : "connected",
+        pnl: 0, trades: 0, latency: Math.floor(Math.random() * 30 + 5),
+        brokerAccountId: selectedBrokerAccount?.id || null,
+        balance: selectedBrokerAccount?.rawBalance || null,
+        balanceDisplay: selectedBrokerAccount?.balance || "N/A",
+      };
+      onConnect(acc);
+
+      // Assign proxy to the saved account
+      if (saveData.account?.id) {
+        apiFetch('/api/proxies/assign', {
+          method: 'POST',
+          body: JSON.stringify({
+            accountId: saveData.account.id,
+            provider: proxyProvider.toLowerCase().replace(/\s/g, ''),
+            region: proxyRegion.toLowerCase().replace(/\s/g, '-'),
+          }),
+        }).catch(() => {});
+      }
+
+      if (role === "master") {
+        setTimeout(() => onStartListener?.(), 100);
+      }
+      onClose();
+    } catch (err) {
+      setAuthError(`Failed to save account: ${err.message}`);
     }
-    onClose();
   };
 
   const handleProxyDone = () => {
@@ -565,8 +625,15 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
                         </div>
                       )}
                       {authError && <div className="auth-screen-error" style={{marginBottom:12}}>{authError}</div>}
-                      <button className="auth-submit" onClick={handleBrokerAuth} style={{ background: platform.color }} disabled={!brokerUsername || !brokerApiKey}>
-                        {platform?.id === "tradovate" ? "Sign In & Authorize" : platform?.id === "topstepx" ? "Authenticate with API Key" : "Connect Account"}
+                      {brokerMfaPending && (platform?.id === "tradovate" || platform?.id === "ninjatrader") && (
+                        <div className="auth-field" style={{background:"rgba(59,130,246,0.06)",padding:"12px",borderRadius:8,border:"1px solid rgba(59,130,246,0.15)",marginBottom:12}}>
+                          <label style={{color:"#3B82F6",fontSize:11,fontWeight:600,letterSpacing:"0.5px"}}>MFA VERIFICATION CODE</label>
+                          <p style={{fontSize:12,color:"var(--t3)",margin:"4px 0 8px"}}>Check your email for the verification code from Tradovate</p>
+                          <input type="text" placeholder="Enter 6-digit code" className="auth-input" value={brokerMfaCode} onChange={e => setBrokerMfaCode(e.target.value)} style={{ fontFamily: "var(--mono)", fontSize: 16, letterSpacing: "4px", textAlign: "center" }} maxLength={6} autoFocus />
+                        </div>
+                      )}
+                      <button className="auth-submit" onClick={handleBrokerAuth} style={{ background: platform.color }} disabled={!brokerUsername || !brokerApiKey || (brokerMfaPending && !brokerMfaCode)}>
+                        {brokerMfaPending ? "Verify Code" : platform?.id === "tradovate" ? "Sign In & Authorize" : platform?.id === "topstepx" ? "Authenticate with API Key" : "Connect Account"}
                       </button>
                       <p className="auth-fine">{platform?.id === "tradovate" ? "OAuth flow: credentials go to Tradovate only. We receive a token." : platform?.id === "topstepx" ? "JWT session via ProjectX Gateway API. Token valid for 24 hours." : "Credentials encrypted with AES-256-GCM. Used only for WebSocket auth."}</p>
                     </div>
@@ -806,6 +873,7 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
               <div className="acct-master-row">
                 <div className="acct-m-info"><StatusDot status={listenerState === "listening" ? "listening" : master.status} /><div><div className="acct-m-name">{master.label}</div><div className="acct-m-sub">{master.platform}</div></div></div>
                 <IPBadge ip={master.ip} provider={master.proxy} region={master.region} />
+                {master.balanceDisplay && master.balanceDisplay !== "N/A" && <div className="acct-m-stat"><span className="acct-m-stat-label">BALANCE</span><span className="c-grn" style={{fontFamily:"var(--mono)",fontWeight:700}}>{master.balanceDisplay}</span></div>}
                 <div className="acct-m-stat"><span className="acct-m-stat-label">P&L</span><span className={master.pnl >= 0 ? "c-grn" : "c-red"}>{fmt(master.pnl)}</span></div>
                 <div className="acct-m-stat"><span className="acct-m-stat-label">TRADES</span><span>{master.trades}</span></div>
                 <div className="acct-m-stat"><span className="acct-m-stat-label">LATENCY</span><LatBar ms={master.latency} /></div>
@@ -828,6 +896,7 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
                 <div className="acct-fc-top"><div className="acct-fc-name-row"><StatusDot status={a.status} /><span className="acct-fc-name">{a.label}</span></div><span className="plat-tag">{a.platform}</span></div>
                 <div className="acct-fc-ip"><IPBadge ip={a.ip} provider={a.proxy} region={a.region} /></div>
                 <div className="acct-fc-stats">
+                  {a.balanceDisplay && a.balanceDisplay !== "N/A" && <div><span className="acct-fc-label">BALANCE</span><span className="c-mono c-grn" style={{fontWeight:700}}>{a.balanceDisplay}</span></div>}
                   <div><span className="acct-fc-label">P&L</span><span className={cn("c-mono", a.pnl >= 0 ? "c-grn" : "c-red")}>{fmt(a.pnl)}</span></div>
                   <div><span className="acct-fc-label">LATENCY</span><LatBar ms={a.latency} /></div>
                   <div><span className="acct-fc-label">TRADES</span><span className="c-mono">{a.trades}</span></div>
@@ -2324,6 +2393,20 @@ export default function App() {
           setUser(data.user);
           setAuthToken("session");
           setCurrentPlan(data.user.plan || "basic");
+          // Load saved accounts from DB
+          apiFetch("/api/accounts").then(r => r.ok ? r.json() : null).then(acctData => {
+            if (acctData?.accounts?.length) {
+              setAccounts(acctData.accounts.map(a => ({
+                id: a.id, label: a.label || `${a.platform} Account`, platform: a.platform,
+                role: a.role, status: a.status || "connected",
+                ip: a.ip_address ? a.ip_address.replace(/\.\d+\.\d+$/, ".xx." + a.ip_address.split(".").pop()) : null,
+                proxy: a.provider || "BrightData", region: a.region || "US-East",
+                pnl: 0, trades: 0, latency: null,
+                brokerAccountId: a.broker_account_id,
+                balance: null, balanceDisplay: null,
+              })));
+            }
+          }).catch(() => {});
         }
         setAuthChecked(true);
       })
