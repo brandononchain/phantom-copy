@@ -49,4 +49,13 @@ export const config = {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   },
+
+  tradovate: {
+    clientId: process.env.TRADOVATE_CLIENT_ID,
+    clientSecret: process.env.TRADOVATE_CLIENT_SECRET,
+    redirectUri: process.env.TRADOVATE_REDIRECT_URI || 'https://api-production-e175.up.railway.app/api/brokers/tradovate/callback',
+    authUrl: 'https://trader.tradovate.com/oauth',
+    demoExchangeUrl: 'https://demo.tradovateapi.com/auth/oauthtoken',
+    liveExchangeUrl: 'https://live.tradovateapi.com/auth/oauthtoken',
+  },
 };

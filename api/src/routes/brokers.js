@@ -76,110 +76,105 @@ router.post('/topstepx/accounts', authRequired, async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Tradovate
-// Auth: POST /v1/auth/accesstokenrequest { name, password, appId, appVersion, cid, sec }
-// Returns: { accessToken, expirationTime, userId }
-// Accounts: GET /v1/account/list (Bearer token)
-// Token lifetime: 90 min, renew at 85 min via POST /v1/auth/renewaccesstoken
+// Tradovate - OAuth Flow
+// Step 1: GET /tradovate/auth-url -> returns the OAuth URL to redirect user to
+// Step 2: Tradovate redirects to /tradovate/callback?code=XXX -> exchanges for token
+// Step 3: POST /tradovate/accounts { token } -> fetches account list
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import { config as appConfig } from '../config/index.js';
+
+// Step 1: Generate the OAuth URL for the frontend to redirect to
 router.post('/tradovate/auth', authRequired, async (req, res) => {
-  const { username, password, environment, pTicket, deviceId, mfaCode, cid, sec } = req.body;
+  const { environment } = req.body;
+  const env = environment || 'demo';
 
-  const baseUrl = environment === 'live' ? APIS.tradovate.live : APIS.tradovate.demo;
-  const apiCid = cid || 0;
-  const apiSec = sec || '';
-
-  // Step 2: MFA code submission
-  if (pTicket && mfaCode) {
-    try {
-      const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: username,
-          password: password,
-          appId: 'PhantomCopy',
-          appVersion: '1.0',
-          deviceId: deviceId || undefined,
-          cid: apiCid,
-          sec: apiSec,
-          'p-ticket': pTicket,
-          'p-captcha': mfaCode,
-        }),
-      });
-
-      const data = await r.json();
-
-      if (!r.ok || !data.accessToken) {
-        return res.status(401).json({
-          error: 'mfa_failed',
-          message: data.errorText || 'Invalid verification code. Check your email and try again.',
-        });
-      }
-
-      return res.json({
-        token: data.accessToken,
-        expiresAt: data.expirationTime,
-        userId: data.userId,
-        platform: 'tradovate',
-      });
-    } catch (err) {
-      return res.status(502).json({ error: 'gateway_error', message: `Tradovate unreachable: ${err.message}` });
-    }
+  const clientId = appConfig.tradovate.clientId;
+  if (!clientId) {
+    return res.status(500).json({ error: 'Tradovate OAuth not configured. Missing CLIENT_ID.' });
   }
 
-  // Step 1: Initial auth (may trigger MFA)
-  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  const redirectUri = appConfig.tradovate.redirectUri;
+
+  // Build the OAuth authorization URL
+  const authUrl = `${appConfig.tradovate.authUrl}`
+    + `?response_type=code`
+    + `&client_id=${encodeURIComponent(clientId)}`
+    + `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+  res.json({
+    oauthUrl: authUrl,
+    environment: env,
+    platform: 'tradovate',
+  });
+});
+
+// Step 2: OAuth callback - Tradovate redirects here with ?code=XXX
+router.get('/tradovate/callback', async (req, res) => {
+  const { code, error } = req.query;
+
+  if (error || !code) {
+    // Redirect to frontend with error
+    const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
+    return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(error || 'no_code')}`);
+  }
 
   try {
-    const devId = `pc_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    // Exchange the code for an access token
+    // Try demo first, fall back to live
+    const exchangeUrl = appConfig.tradovate.demoExchangeUrl;
 
-    const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
+    const tokenRes = await fetch(exchangeUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: username,
-        password: password,
-        appId: 'PhantomCopy',
-        appVersion: '1.0',
-        deviceId: devId,
-        cid: apiCid,
-        sec: apiSec,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: appConfig.tradovate.redirectUri,
+        client_id: appConfig.tradovate.clientId,
+        client_secret: appConfig.tradovate.clientSecret,
       }),
     });
 
-    const data = await r.json();
+    const tokenData = await tokenRes.json();
 
-    // MFA required - return p-ticket to frontend
-    if (data['p-ticket']) {
-      return res.status(401).json({
-        error: 'mfa_required',
-        mfaRequired: true,
-        pTicket: data['p-ticket'],
-        deviceId: devId,
-        message: 'Multi-factor authentication required. Check your email for the verification code.',
+    if (tokenData.error || !tokenData.access_token) {
+      // If demo fails, try live exchange
+      const liveRes = await fetch(appConfig.tradovate.liveExchangeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: appConfig.tradovate.redirectUri,
+          client_id: appConfig.tradovate.clientId,
+          client_secret: appConfig.tradovate.clientSecret,
+        }),
       });
+
+      const liveData = await liveRes.json();
+
+      if (liveData.error || !liveData.access_token) {
+        const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
+        return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(liveData.error_description || liveData.error || 'token_exchange_failed')}`);
+      }
+
+      // Success with live
+      const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
+      return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(liveData.access_token)}&tradovate_expires=${liveData.expires_in || 5400}&tradovate_env=live`);
     }
 
-    if (!r.ok || !data.accessToken) {
-      return res.status(401).json({
-        error: 'auth_failed',
-        message: data.errorText || 'Invalid credentials. Make sure you are using your Dedicated API Password (not your regular login password) and correct CID + Secret from Tradovate Settings → API Access.',
-      });
-    }
+    // Success with demo
+    const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
+    return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(tokenData.access_token)}&tradovate_expires=${tokenData.expires_in || 5400}&tradovate_env=demo`);
 
-    res.json({
-      token: data.accessToken,
-      expiresAt: data.expirationTime,
-      userId: data.userId,
-      platform: 'tradovate',
-    });
   } catch (err) {
-    res.status(502).json({ error: 'gateway_error', message: `Tradovate unreachable: ${err.message}` });
+    const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
+    return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(err.message)}`);
   }
 });
 
+// Step 3: Fetch accounts using the OAuth token
 router.post('/tradovate/accounts', authRequired, async (req, res) => {
   const { token, environment } = req.body;
   if (!token) return res.status(400).json({ error: 'Token required' });
@@ -283,60 +278,19 @@ router.post('/rithmic/accounts', authRequired, async (req, res) => {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NinjaTrader
-// NinjaTrader uses Tradovate infrastructure (merged companies).
-// Auth is identical to Tradovate: POST /v1/auth/accesstokenrequest
-// The difference is branding and that NT users may have NT-specific accounts.
-// We route through the same Tradovate API but label as NinjaTrader.
+// Uses the same Tradovate OAuth flow (merged companies, same infrastructure).
+// The /tradovate/callback handles both. NinjaTrader auth just redirects to same OAuth.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.post('/ninjatrader/auth', authRequired, async (req, res) => {
-  const { username, password, environment, pTicket, deviceId, mfaCode, cid, sec } = req.body;
-  const baseUrl = environment === 'live' ? APIS.tradovate.live : APIS.tradovate.demo;
-  const apiCid = cid || 0;
-  const apiSec = sec || '';
-
-  if (pTicket && mfaCode) {
-    try {
-      const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: username, password, appId: 'PhantomCopy', appVersion: '1.0',
-          deviceId: deviceId || undefined, cid: apiCid, sec: apiSec,
-          'p-ticket': pTicket, 'p-captcha': mfaCode,
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok || !data.accessToken) {
-        return res.status(401).json({ error: 'mfa_failed', message: data.errorText || 'Invalid verification code.' });
-      }
-      return res.json({ token: data.accessToken, expiresAt: data.expirationTime, userId: data.userId, platform: 'ninjatrader' });
-    } catch (err) {
-      return res.status(502).json({ error: 'gateway_error', message: `NinjaTrader API unreachable: ${err.message}` });
-    }
+  // NinjaTrader uses the exact same Tradovate OAuth flow
+  const clientId = appConfig.tradovate.clientId;
+  if (!clientId) {
+    return res.status(500).json({ error: 'OAuth not configured.' });
   }
-
-  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-
-  try {
-    const devId = `pc_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: username, password, appId: 'PhantomCopy', appVersion: '1.0', deviceId: devId, cid: apiCid, sec: apiSec }),
-    });
-    const data = await r.json();
-
-    if (data['p-ticket']) {
-      return res.status(401).json({ error: 'mfa_required', mfaRequired: true, pTicket: data['p-ticket'], deviceId: devId, message: 'Check your email for the verification code.' });
-    }
-    if (!r.ok || !data.accessToken) {
-      return res.status(401).json({ error: 'auth_failed', message: data.errorText || 'Invalid credentials. Use your Dedicated API Password and API Key (CID + Secret) from Tradovate Settings.' });
-    }
-    res.json({ token: data.accessToken, expiresAt: data.expirationTime, userId: data.userId, platform: 'ninjatrader' });
-  } catch (err) {
-    res.status(502).json({ error: 'gateway_error', message: `NinjaTrader API unreachable: ${err.message}` });
-  }
+  const redirectUri = appConfig.tradovate.redirectUri;
+  const authUrl = `${appConfig.tradovate.authUrl}?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  res.json({ oauthUrl: authUrl, platform: 'ninjatrader' });
 });
 
 router.post('/ninjatrader/accounts', authRequired, async (req, res) => {
