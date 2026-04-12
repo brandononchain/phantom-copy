@@ -2007,6 +2007,7 @@ function SignalWebhookPanel() {
   const [generatedUrl, setGeneratedUrl] = useState(null);
   const [showPayloads, setShowPayloads] = useState(false);
   const [signalHistory, setSignalHistory] = useState([]);
+  const [copied, setCopied] = useState(null);
 
   useEffect(() => {
     apiFetch("/api/signals/keys").then(r => r.ok ? r.json() : null).then(d => {
@@ -2029,80 +2030,106 @@ function SignalWebhookPanel() {
   };
 
   const deleteKey = async (id) => {
-    if (!confirm("Revoke this signal key? TradingView alerts using this URL will stop working.")) return;
+    if (!confirm("Revoke this signal key? Alerts using this URL will stop working.")) return;
     await apiFetch(`/api/signals/keys/${id}`, { method: "DELETE" });
     setSignalKeys(prev => prev.filter(k => k.id !== id));
   };
 
-  const copyText = (text) => { navigator.clipboard.writeText(text).then(() => {}).catch(() => {}); };
+  const copyText = (text, label) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(label); setTimeout(() => setCopied(null), 1500); }).catch(() => {});
+  };
 
   return (
-    <div>
+    <div className="pp-section">
+      {/* Generated URL card */}
       {generatedUrl && (
-        <div style={{ background: "rgba(0,229,160,0.06)", border: "1px solid rgba(0,229,160,0.15)", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#00E5A0", letterSpacing: "0.5px" }}>YOUR SIGNAL WEBHOOK URL</span>
-            <span style={{ fontSize: 10, color: "var(--t3)", background: "rgba(255,180,0,0.1)", padding: "2px 6px", borderRadius: 4 }}>Save this. Full key shown only once.</span>
+        <div className="card-sh" style={{ margin: "0 0 16px", border: "1px solid rgba(0,229,160,0.15)" }}>
+          <div className="card-in" style={{ padding: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span className="set-label" style={{ color: "#00E5A0", margin: 0 }}>WEBHOOK URL</span>
+              <span style={{ fontSize: 10, color: "var(--t3)", background: "rgba(255,180,0,0.08)", border: "1px solid rgba(255,180,0,0.15)", padding: "3px 8px", borderRadius: 4 }}>Save this. Shown only once.</span>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+              <div style={{ flex: 1, fontFamily: "var(--mono)", fontSize: 12, color: "var(--t1)", background: "rgba(0,0,0,0.4)", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--bdr)", wordBreak: "break-all", lineHeight: 1.5 }}>{generatedUrl.signalUrl}</div>
+              <button className="btn-primary" style={{ whiteSpace: "nowrap", fontSize: 12 }} onClick={() => copyText(generatedUrl.signalUrl, "url")}>
+                <span>{copied === "url" ? "Copied" : "Copy URL"}</span>
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <code style={{ flex: 1, fontFamily: "var(--mono)", fontSize: 12, color: "var(--t1)", background: "rgba(0,0,0,0.3)", padding: "10px 12px", borderRadius: 8, wordBreak: "break-all" }}>{generatedUrl.signalUrl}</code>
-            <button className="fc-btn" style={{ whiteSpace: "nowrap", padding: "10px 14px" }} onClick={() => copyText(generatedUrl.signalUrl)}>Copy URL</button>
-          </div>
-          <button style={{ background: "none", border: "none", color: "#3B82F6", fontSize: 12, cursor: "pointer", marginTop: 12, padding: 0 }} onClick={() => setShowPayloads(!showPayloads)}>
-            {showPayloads ? "Hide" : "Show"} example payloads
+        </div>
+      )}
+
+      {/* Payload examples (collapsible) */}
+      {generatedUrl && (
+        <div style={{ marginBottom: 16 }}>
+          <button className="set-section-toggle" onClick={() => setShowPayloads(!showPayloads)} style={{ background: "none", border: "none", color: "var(--t3)", fontSize: 12, cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: showPayloads ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}><path d="M9 18l6-6-6-6"/></svg>
+            Example payloads for TradingView, TrendSpider, cURL
           </button>
           {showPayloads && (
-            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-              <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--t2)", letterSpacing: "0.5px" }}>TRADINGVIEW STRATEGY</span>
-                  <button className="fc-btn" style={{ fontSize: 10, padding: "3px 8px" }} onClick={() => copyText(generatedUrl.instructions.tradingview.message_format)}>Copy</button>
+            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              {[
+                { label: "TRADINGVIEW STRATEGY", code: generatedUrl.instructions.tradingview.message_format, key: "tv" },
+                { label: "CUSTOM / cURL", code: generatedUrl.instructions.custom_curl, key: "curl" },
+              ].map(ex => (
+                <div key={ex.key} style={{ background: "rgba(255,255,255,0.02)", borderRadius: 10, border: "1px solid var(--bdr)", padding: "10px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span className="set-label" style={{ margin: 0, fontSize: 10 }}>{ex.label}</span>
+                    <button className="fc-btn" style={{ fontSize: 10, padding: "3px 10px" }} onClick={() => copyText(ex.code, ex.key)}>{copied === ex.key ? "Copied" : "Copy"}</button>
+                  </div>
+                  <pre style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t2)", margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{ex.code}</pre>
                 </div>
-                <pre style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t2)", margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{generatedUrl.instructions.tradingview.message_format}</pre>
-              </div>
-              <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--t2)", letterSpacing: "0.5px" }}>CUSTOM / cURL</span>
-                  <button className="fc-btn" style={{ fontSize: 10, padding: "3px 8px" }} onClick={() => copyText(generatedUrl.instructions.custom_curl)}>Copy</button>
-                </div>
-                <pre style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t2)", margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{generatedUrl.instructions.custom_curl}</pre>
-              </div>
+              ))}
             </div>
           )}
         </div>
       )}
 
+      {/* Active signal keys list */}
       {signalKeys.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          {signalKeys.map(k => (
-            <div key={k.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--bdr)" }}>
-              <div><div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{k.name}</div><div style={{ fontSize: 11, fontFamily: "var(--mono)", color: "var(--t3)", marginTop: 2 }}>{k.key_prefix}</div></div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ fontSize: 10, color: "#00E5A0" }}>Active</span><button className="fc-btn fc-btn-danger" style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => deleteKey(k.id)}>Revoke</button></div>
+          {signalKeys.map((k, i) => (
+            <div key={k.id} className="pp-pool-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: i < signalKeys.length - 1 ? "1px solid var(--bdr)" : "none" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{k.name}</div>
+                <div style={{ fontSize: 11, fontFamily: "var(--mono)", color: "var(--t3)", marginTop: 3 }}>{k.key_prefix}</div>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "#00E5A0", letterSpacing: "0.3px" }}>ACTIVE</span>
+                <button className="fc-btn fc-btn-danger" style={{ fontSize: 10, padding: "5px 10px" }} onClick={() => deleteKey(k.id)}>Revoke</button>
+              </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* Create new key */}
       {showCreate ? (
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <div className="set-field" style={{ flex: 1, marginBottom: 0 }}><label className="set-label">SIGNAL NAME</label><input className="set-input" placeholder="e.g. NQ Scalper Strategy" value={newName} onChange={e => setNewName(e.target.value)} /></div>
-          <button className="btn-primary" onClick={createSignalKey} style={{ height: 40, whiteSpace: "nowrap" }}><span>Generate URL</span><span className="btn-aw"><span className="btn-ar">&#10003;</span></span></button>
+          <div className="set-field" style={{ flex: 1, marginBottom: 0 }}>
+            <label className="set-label">STRATEGY NAME</label>
+            <input className="set-input" placeholder="e.g. NQ Scalper, ES Breakout" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createSignalKey()} />
+          </div>
+          <button className="btn-primary" onClick={createSignalKey} style={{ height: 40 }}><span>Generate</span><span className="btn-aw"><span className="btn-ar">&#10003;</span></span></button>
           <button className="btn-ghost" onClick={() => setShowCreate(false)} style={{ height: 40 }}>Cancel</button>
         </div>
       ) : (
-        <button className="btn-primary" onClick={() => setShowCreate(true)}><span>+ New Signal Webhook</span><span className="btn-aw"><span className="btn-ar">&#8594;</span></span></button>
+        <button className="pp-add-btn" onClick={() => setShowCreate(true)}>+ New Signal Webhook</button>
       )}
 
+      {/* Signal history */}
       {signalHistory.length > 0 && (
         <div style={{ marginTop: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)", letterSpacing: "0.5px", marginBottom: 8 }}>RECENT SIGNALS</div>
-          {signalHistory.slice(0, 5).map((s, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--bdr)", fontSize: 12 }}>
-              <span style={{ fontFamily: "var(--mono)", color: s.signal_type?.includes("ERROR") || s.signal_type?.includes("FAILED") ? "var(--red)" : "#00E5A0" }}>{s.signal_type}</span>
-              <span style={{ color: "var(--t2)" }}>{s.contract_id} {s.side} {s.qty}</span>
-              <span style={{ color: "var(--t3)" }}>{new Date(s.timestamp).toLocaleString()}</span>
-            </div>
-          ))}
+          <span className="set-label">RECENT SIGNALS</span>
+          <div style={{ marginTop: 6 }}>
+            {signalHistory.slice(0, 5).map((s, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "120px 1fr auto", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--bdr)", fontSize: 12, alignItems: "center" }}>
+                <span style={{ fontFamily: "var(--mono)", fontWeight: 600, fontSize: 11, color: s.signal_type?.includes("ERROR") || s.signal_type?.includes("FAILED") ? "var(--red)" : "#00E5A0" }}>{s.signal_type?.replace("WEBHOOK_", "")}</span>
+                <span style={{ fontFamily: "var(--mono)", color: "var(--t2)" }}>{s.contract_id} {s.side} x{s.qty}</span>
+                <span style={{ color: "var(--t3)", fontSize: 11 }}>{new Date(s.timestamp).toLocaleTimeString()}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
