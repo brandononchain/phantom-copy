@@ -36,6 +36,14 @@ export const config = {
       username: process.env.OXYLABS_USERNAME,
       password: process.env.OXYLABS_PASSWORD,
     },
+    smartproxy: {
+      username: process.env.SMARTPROXY_USERNAME,
+      password: process.env.SMARTPROXY_PASSWORD,
+    },
+    iproyal: {
+      username: process.env.IPROYAL_USERNAME,
+      password: process.env.IPROYAL_PASSWORD,
+    },
   },
 
   cors: {

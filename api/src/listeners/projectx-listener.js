@@ -13,7 +13,7 @@ import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { EventEmitter } from 'events';
 
-const PROJECTX_API    = 'https://api.thefuturesdesk.projectx.com';
+const PROJECTX_API    = 'https://api.topstepx.com';
 const PROJECTX_USER_HUB = 'https://rtc.thefuturesdesk.projectx.com/hubs/user';
 const TOKEN_REFRESH_MS  = 23 * 60 * 60 * 1000; // 23 hours (tokens last 24h)
 

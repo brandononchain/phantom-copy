@@ -17,6 +17,7 @@ import proxyRoutes from './routes/proxies.js';
 import billingRoutes from './routes/billing.js';
 import proplusRoutes from './routes/proplus.js';
 import brokerRoutes from './routes/brokers.js';
+import listenerRoutes from './routes/listeners.js';
 
 const app = express();
 
@@ -74,6 +75,7 @@ app.use('/api/proxies', proxyRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/proplus', proplusRoutes);
 app.use('/api/brokers', brokerRoutes);
+app.use('/api/listeners', listenerRoutes);
 
 // ── 404 ──────────────────────────────────────────────────────────────────────
 
