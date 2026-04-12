@@ -297,6 +297,10 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
   // platform -> auth -> proxy -> (master only: select_account -> launch) -> done
   const [platform, setPlatform] = useState(null);
   const [authState, setAuthState] = useState("idle");
+  const [authError, setAuthError] = useState(null);
+  const [brokerUsername, setBrokerUsername] = useState("");
+  const [brokerApiKey, setBrokerApiKey] = useState("");
+  const [brokerToken, setBrokerToken] = useState(null);
   const [role, setRole] = useState(existingMaster ? "follower" : "master");
   const [label, setLabel] = useState("");
   const [proxyRegion, setProxyRegion] = useState("US-East");
@@ -304,23 +308,14 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
 
   // Master-specific state
   const [selectedBrokerAccount, setSelectedBrokerAccount] = useState(null);
-  const [launchPhase, setLaunchPhase] = useState(null); // null | "booting" | "ready"
+  const [launchPhase, setLaunchPhase] = useState(null);
   const [launchStageIdx, setLaunchStageIdx] = useState(0);
   const [launchLog, setLaunchLog] = useState([]);
   const launchTimer = useRef(null);
   const assignedIP = useRef(`${Math.floor(Math.random()*200+20)}.${Math.floor(Math.random()*200+20)}.${Math.floor(Math.random()*200+20)}.${Math.floor(Math.random()*90+10)}`);
 
-  // Simulated broker accounts returned after OAuth
-  const [brokerAccounts] = useState(
-    platform?.id === "topstepx" ? [
-      { id: "TSX-50K-001", name: "TopStepX 50K Combine", balance: "$50,000", type: "Evaluation" },
-      { id: "TSX-150K-002", name: "TopStepX 150K Express", balance: "$150,000", type: "Funded" },
-    ] : [
-      { id: "TV-88412", name: "APEX-77241 (Eval)", balance: "$150,000", type: "Evaluation" },
-      { id: "TV-88413", name: "APEX-77241 (Funded)", balance: "$50,000", type: "Funded" },
-      { id: "TV-88414", name: "Personal SIM", balance: "$100,000", type: "Simulation" },
-    ]
-  );
+  // Real broker accounts fetched after auth
+  const [brokerAccounts, setBrokerAccounts] = useState([]);
 
   const LAUNCH_STAGES = [
     { label: "Establishing proxy tunnel", detail: `Routing via ${proxyProvider} (${proxyRegion})` },
@@ -362,7 +357,59 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
     { t: "00.752", msg: "Master listener ready. Watching for trades.", type: "ready" },
   ];
 
-  const simulateLogin = () => { setAuthState("loading"); setTimeout(() => setAuthState("success"), 2200); };
+  const handleBrokerAuth = async () => {
+    setAuthState("loading");
+    setAuthError(null);
+
+    try {
+      if (platform?.id === "topstepx") {
+        // Real ProjectX auth via our API proxy
+        const authRes = await fetch("/api/brokers/topstepx/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ username: brokerUsername, apiKey: brokerApiKey }),
+        });
+        const authData = await authRes.json();
+        if (!authRes.ok) throw new Error(authData.message || authData.error || "Authentication failed");
+
+        setBrokerToken(authData.token);
+
+        // Fetch real accounts
+        const acctRes = await fetch("/api/brokers/topstepx/accounts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ token: authData.token }),
+        });
+        const acctData = await acctRes.json();
+        if (!acctRes.ok) throw new Error(acctData.message || "Failed to fetch accounts");
+
+        setBrokerAccounts((acctData.accounts || []).map(a => ({
+          id: String(a.id),
+          name: a.name,
+          balance: a.balance != null ? `$${Number(a.balance).toLocaleString()}` : "N/A",
+          type: a.simulated ? "Simulation" : a.canTrade ? "Live" : "Inactive",
+        })));
+
+        setAuthState("success");
+      } else {
+        // Other brokers: call their auth endpoint (returns 501 for now)
+        const authRes = await fetch(`/api/brokers/${platform?.id}/auth`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ username: brokerUsername, password: brokerApiKey }),
+        });
+        const authData = await authRes.json();
+        if (!authRes.ok) throw new Error(authData.message || authData.error || "Not yet supported");
+        setAuthState("success");
+      }
+    } catch (err) {
+      setAuthError(err.message);
+      setAuthState("idle");
+    }
+  };
 
   const startLaunch = () => {
     setLaunchPhase("booting");
@@ -494,14 +541,15 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
                     <div className="auth-login-form fade-in">
                       <div className="auth-brand"><div className="auth-brand-icon" style={{ background: `${platform.color}20`, color: platform.color }}>{platform.icon}</div><span className="auth-brand-name">{platform.name}</span></div>
                       <p className="auth-brand-sub">Sign in with your {platform.name} account</p>
-                      <div className="auth-field"><label>{platform?.id === "rithmic" ? "R|Trader Username" : platform?.id === "topstepx" ? "TopStepX Username" : "Email or Username"}</label><input type="text" placeholder={platform?.id === "rithmic" ? "rithmic_user" : platform?.id === "topstepx" ? "your_username" : "trader@example.com"} className="auth-input" /></div>
-                      <div className="auth-field"><label>{platform?.id === "topstepx" ? "API Key" : "Password"}</label><input type={platform?.id === "topstepx" ? "text" : "password"} placeholder={platform?.id === "topstepx" ? "Paste API key from your firm" : "Your password"} className="auth-input" style={platform?.id === "topstepx" ? { fontFamily: "var(--mono)", fontSize: 12 } : {}} /></div>
+                      <div className="auth-field"><label>{platform?.id === "rithmic" ? "R|Trader Username" : platform?.id === "topstepx" ? "TopStepX Username" : "Email or Username"}</label><input type="text" placeholder={platform?.id === "rithmic" ? "rithmic_user" : platform?.id === "topstepx" ? "your_username" : "trader@example.com"} className="auth-input" value={brokerUsername} onChange={e => setBrokerUsername(e.target.value)} /></div>
+                      <div className="auth-field"><label>{platform?.id === "topstepx" ? "API Key" : "Password"}</label><input type={platform?.id === "topstepx" ? "text" : "password"} placeholder={platform?.id === "topstepx" ? "Paste API key from your firm" : "Your password"} className="auth-input" value={brokerApiKey} onChange={e => setBrokerApiKey(e.target.value)} style={platform?.id === "topstepx" ? { fontFamily: "var(--mono)", fontSize: 12 } : {}} /></div>
                       {platform?.id === "rithmic" && (
                         <div className="auth-field"><label>Environment</label>
                           <select className="auth-input"><option>Rithmic Paper Trading</option><option>Rithmic 01 (Live)</option></select>
                         </div>
                       )}
-                      <button className="auth-submit" onClick={simulateLogin} style={{ background: platform.color }}>
+                      {authError && <div className="auth-screen-error" style={{marginBottom:12}}>{authError}</div>}
+                      <button className="auth-submit" onClick={handleBrokerAuth} style={{ background: platform.color }} disabled={!brokerUsername || !brokerApiKey}>
                         {platform?.id === "tradovate" ? "Sign In & Authorize" : platform?.id === "topstepx" ? "Authenticate with API Key" : "Connect Account"}
                       </button>
                       <p className="auth-fine">{platform?.id === "tradovate" ? "OAuth flow: credentials go to Tradovate only. We receive a token." : platform?.id === "topstepx" ? "JWT session via ProjectX Gateway API. Token valid for 24 hours." : "Credentials encrypted with AES-256-GCM. Used only for WebSocket auth."}</p>
@@ -3124,7 +3172,7 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .auth-screen-form{padding:28px}
 .auth-screen-form .set-field{margin-bottom:16px}
 .auth-screen-error{padding:10px 14px;background:rgba(255,77,77,0.08);border:1px solid rgba(255,77,77,0.15);border-radius:8px;color:var(--red);font-size:12px;margin-bottom:8px}
-.auth-screen-footer{text-align:center;font-size:12px;color:var(--t3);margin-top:24px;max-width:300px;line-height:1.5}
+.auth-screen-footer{text-align:center;font-size:12px;color:var(--t3);margin-top:24px;max-width:420px;line-height:1.5}
 
 .fade-in{animation:fsu 0.6s var(--ease) both}
 
