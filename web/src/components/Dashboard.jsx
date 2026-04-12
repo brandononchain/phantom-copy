@@ -838,7 +838,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
 }
 
 // ─── Accounts Page ───────────────────────────────────────────────────────────
-function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, events, positions, onStartListener, onStopListener }) {
+function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, events, positions, onStartListener, onStopListener, onDisconnect, onPause }) {
   const master = accounts.find(a => a.role === "master");
   const followers = accounts.filter(a => a.role === "follower");
 
@@ -909,7 +909,7 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
                   <div><span className="acct-fc-label">LATENCY</span><LatBar ms={a.latency} /></div>
                   <div><span className="acct-fc-label">TRADES</span><span className="c-mono">{a.trades}</span></div>
                 </div>
-                <div className="acct-fc-actions"><button className="fc-btn">Pause</button><button className="fc-btn fc-btn-danger">Disconnect</button></div>
+                <div className="acct-fc-actions"><button className="fc-btn" onClick={() => onPause(a.id)}>{a.status === "paused" ? "Resume" : "Pause"}</button><button className="fc-btn fc-btn-danger" onClick={() => onDisconnect(a.id)}>Disconnect</button></div>
               </div>
             ))}
           </div>
@@ -1227,17 +1227,17 @@ function TradeLogPage({ accounts }) {
 }
 
 // ─── Proxy & Placeholder Pages ───────────────────────────────────────────────
-function ProxyPage({ accounts }) {
+function ProxyPage({ accounts, onRotateProxy, onTestProxy, onRotateAll }) {
   return (
     <div className="page fade-in">
-      <div className="pg-head"><div><h1 className="pg-title">IP Mixer</h1><p className="pg-sub">Each account routes through a dedicated residential proxy</p></div><button className="btn-primary"><span>Rotate All IPs</span><span className="btn-aw"><span className="btn-ar">&#8635;</span></span></button></div>
+      <div className="pg-head"><div><h1 className="pg-title">IP Mixer</h1><p className="pg-sub">Each account routes through a dedicated residential proxy</p></div><button className="btn-primary" onClick={onRotateAll}><span>Rotate All IPs</span><span className="btn-aw"><span className="btn-ar">&#8635;</span></span></button></div>
       <div className="proxy-grid">
         {accounts.map((a, i) => (
           <div key={a.id} className="px-shell" style={{ animationDelay: `${i * 70}ms` }}><div className="px-inner">
             <div className="px-top"><div className="px-name-r"><StatusDot status={a.status} /><span className="px-name">{a.label}</span></div><span className="px-prov">{a.proxy}</span></div>
             <div className="px-ip-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.5"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="7" cy="12" r="1.5" fill="currentColor"/></svg><div><div className="px-ip">{a.ip}</div><div className="px-region">{a.region}</div></div></div>
             <div className="px-meta"><div><span className="px-ml">LATENCY</span><LatBar ms={a.latency} /></div><div><span className="px-ml">UPTIME</span><span className="px-mv">{a.latency ? "99.8%" : "0%"}</span></div></div>
-            <div className="px-acts"><button className="px-btn">Rotate IP</button><button className="px-btn px-btn-a">Test</button></div>
+            <div className="px-acts"><button className="px-btn" onClick={() => onRotateProxy(a.id)}>Rotate IP</button><button className="px-btn px-btn-a" onClick={() => onTestProxy(a.id)}>Test</button></div>
           </div></div>
         ))}
       </div>
@@ -2529,13 +2529,56 @@ export default function App() {
   }, [master, listenerState, startListener]);
 
   const addAccount = (acc) => setAccounts(prev => [...prev, acc]);
+
+  const disconnectAccount = async (accountId) => {
+    if (!confirm("Disconnect this account? It will be removed from your dashboard.")) return;
+    try {
+      await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
+      setAccounts(prev => prev.filter(a => a.id !== accountId));
+    } catch (err) {
+      console.error("Disconnect failed:", err);
+    }
+  };
+
+  const pauseAccount = (accountId) => {
+    setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, status: a.status === "paused" ? "connected" : "paused" } : a));
+  };
+
+  const rotateProxy = async (accountId) => {
+    try {
+      const r = await apiFetch(`/api/proxies/${accountId}/rotate`, { method: "POST" });
+      const data = await r.json();
+      if (data.success) {
+        setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, ip: data.newIp ? data.newIp.replace(/\.\d+\.\d+$/, ".xx." + data.newIp.split(".").pop()) : a.ip } : a));
+      }
+    } catch (err) {
+      console.error("Rotate failed:", err);
+    }
+  };
+
+  const testProxy = async (accountId) => {
+    try {
+      const r = await apiFetch(`/api/proxies/${accountId}/health`, { method: "POST" });
+      const data = await r.json();
+      setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, latency: data.latency || a.latency } : a));
+      alert(data.healthy ? `Proxy healthy. Latency: ${data.latency}ms` : `Proxy unhealthy: ${data.error}`);
+    } catch (err) {
+      console.error("Test failed:", err);
+    }
+  };
+
+  const rotateAllProxies = async () => {
+    for (const a of accounts) {
+      await rotateProxy(a.id);
+    }
+  };
   const existingMaster = accounts.find(a => a.role === "master");
 
   const renderPage = () => {
     switch (page) {
       case "overview": return <OverviewPage accounts={accounts} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} expandedTrade={expandedTrade} setExpandedTrade={setExpandedTrade} />;
-      case "accounts": return <AccountsPage accounts={accounts} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} listenerStage={listenerStage} events={events} positions={positions} onStartListener={startListener} onStopListener={stopListener} />;
-      case "proxies": return <ProxyPage accounts={accounts} />;
+      case "accounts": return <AccountsPage accounts={accounts} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} listenerStage={listenerStage} events={events} positions={positions} onStartListener={startListener} onStopListener={stopListener} onDisconnect={disconnectAccount} onPause={pauseAccount} />;
+      case "proxies": return <ProxyPage accounts={accounts} onRotateProxy={rotateProxy} onTestProxy={testProxy} onRotateAll={rotateAllProxies} />;
       case "trades": return <TradeLogPage accounts={accounts} />;
       case "settings": return <SettingsPage accounts={accounts} currentPlan={currentPlan} />;
       case "profile": return <ProfilePage onSignOut={handleSignOut} currentPlan={currentPlan} onPlanChange={setCurrentPlan} user={user} />;
