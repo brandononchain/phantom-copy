@@ -305,11 +305,12 @@ function MasterListenerPanel({ master, listenerState, listenerStage, events, pos
 }
 
 // ─── Connect Modal ───────────────────────────────────────────────────────────
-function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
-  const [step, setStep] = useState("platform");
+function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oauthResume }) {
+  const [step, setStep] = useState(oauthResume ? "auth" : "platform");
   // platform -> auth -> proxy -> (master only: select_account -> launch) -> done
-  const [platform, setPlatform] = useState(null);
-  const [authState, setAuthState] = useState("idle");
+  const findPlatform = (id) => PLATFORMS.find(p => p.id === id);
+  const [platform, setPlatform] = useState(oauthResume ? findPlatform(oauthResume.platform) : null);
+  const [authState, setAuthState] = useState(oauthResume ? "loading" : "idle");
   const [authError, setAuthError] = useState(null);
   const [brokerUsername, setBrokerUsername] = useState("");
   const [brokerApiKey, setBrokerApiKey] = useState("");
@@ -319,8 +320,8 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
   const [brokerMfaPending, setBrokerMfaPending] = useState(false);
   const [brokerPTicket, setBrokerPTicket] = useState(null);
   const [brokerDeviceId, setBrokerDeviceId] = useState(null);
-  const [brokerToken, setBrokerToken] = useState(null);
-  const [brokerEnv, setBrokerEnv] = useState("Rithmic Paper Trading");
+  const [brokerToken, setBrokerToken] = useState(oauthResume?.token || null);
+  const [brokerEnv, setBrokerEnv] = useState(oauthResume?.env || "Rithmic Paper Trading");
   const [role, setRole] = useState(existingMaster ? "follower" : "master");
   const [label, setLabel] = useState("");
   const [proxyRegion, setProxyRegion] = useState("US-East");
@@ -336,6 +337,34 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
 
   // Real broker accounts fetched after auth
   const [brokerAccounts, setBrokerAccounts] = useState([]);
+
+  // If we have an OAuth resume token, fetch accounts immediately
+  useEffect(() => {
+    if (oauthResume?.token && platform) {
+      const pid = platform.id;
+      apiFetch(`/api/brokers/${pid === "ninjatrader" ? "ninjatrader" : "tradovate"}/accounts`, {
+        method: "POST",
+        body: JSON.stringify({ token: oauthResume.token, environment: oauthResume.env || "demo" }),
+      }).then(r => r.ok ? r.json() : null).then(acctData => {
+        if (acctData?.accounts?.length) {
+          setBrokerAccounts(acctData.accounts.map(a => ({
+            id: String(a.id),
+            name: a.name || a.nickname || `Account ${a.id}`,
+            balance: a.balance != null ? `$${Number(a.balance).toLocaleString()}` : "N/A",
+            rawBalance: a.balance,
+            type: a.type || "Demo",
+          })));
+          setAuthState("success");
+        } else {
+          setAuthError("No accounts found on this login.");
+          setAuthState("idle");
+        }
+      }).catch(err => {
+        setAuthError(`Failed to fetch accounts: ${err.message}`);
+        setAuthState("idle");
+      });
+    }
+  }, []);
 
   const LAUNCH_STAGES = [
     { label: "Establishing proxy tunnel", detail: `Routing via ${proxyProvider} (${proxyRegion})` },
@@ -2388,6 +2417,7 @@ export default function App() {
   const [page, setPage] = useState("overview");
   const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
   const [showConnect, setShowConnect] = useState(false);
+  const [oauthResume, setOauthResume] = useState(null); // { token, env, platform }
   const [expandedTrade, setExpandedTrade] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentPlan, setCurrentPlan] = useState("basic");
@@ -2427,37 +2457,10 @@ export default function App() {
             }
           }).catch(() => {});
 
-          // Handle Tradovate OAuth callback token
+          // Handle Tradovate OAuth callback token - reopen connect modal at account selection step
           if (tradovateToken) {
-            apiFetch("/api/brokers/tradovate/accounts", {
-              method: "POST",
-              body: JSON.stringify({ token: tradovateToken, environment: tradovateEnv }),
-            }).then(r => r.ok ? r.json() : null).then(acctData => {
-              if (acctData?.accounts?.length) {
-                // Save each account to DB
-                for (const a of acctData.accounts) {
-                  apiFetch("/api/accounts", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      platform: "tradovate",
-                      role: "follower",
-                      brokerAccountId: String(a.id),
-                      label: a.nickname || a.name || `Tradovate ${a.id}`,
-                      credentials: JSON.stringify({ token: tradovateToken }),
-                    }),
-                  }).catch(() => {});
-                }
-                // Add to local state
-                setAccounts(prev => [...prev, ...acctData.accounts.map(a => ({
-                  id: `tv_${a.id}`, label: a.nickname || a.name || `Tradovate ${a.id}`,
-                  platform: "Tradovate", role: "follower", status: "connected",
-                  ip: null, proxy: "BrightData", region: "US-East",
-                  pnl: 0, trades: 0, latency: null,
-                  brokerAccountId: String(a.id),
-                  balance: a.balance, balanceDisplay: a.balance != null ? `$${Number(a.balance).toLocaleString()}` : null,
-                }))]);
-              }
-            }).catch(err => console.error("Tradovate account fetch failed:", err));
+            setOauthResume({ token: tradovateToken, env: tradovateEnv, platform: "tradovate" });
+            setShowConnect(true);
           }
         }
         setAuthChecked(true);
@@ -2602,7 +2605,7 @@ export default function App() {
         <Sidebar active={page} onNav={setPage} masterAccount={master} listenerState={listenerState} currentPlan={currentPlan} />
         <main className="main">{renderPage()}</main>
       </div>
-      {showConnect && <ConnectModal onClose={() => setShowConnect(false)} onConnect={addAccount} existingMaster={existingMaster} onStartListener={startListener} />}
+      {showConnect && <ConnectModal onClose={() => { setShowConnect(false); setOauthResume(null); }} onConnect={addAccount} existingMaster={existingMaster} onStartListener={startListener} oauthResume={oauthResume} />}
       {showOnboarding && <OnboardingOverlay onComplete={() => { setShowOnboarding(false); setPage("accounts"); }} />}
     </>
   );
