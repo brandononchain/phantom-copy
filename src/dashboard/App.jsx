@@ -3110,6 +3110,22 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 @keyframes pulse-live{0%,100%{opacity:1}50%{opacity:0.4}}
 @keyframes pulse-text{0%,100%{opacity:1}50%{opacity:0.5}}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* ── Auth Screen ────────────────────────── */
+.auth-screen{min-height:100dvh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:40px 20px}
+.auth-screen-inner{width:420px;max-width:100%;display:flex;flex-direction:column;align-items:center}
+.auth-screen-brand{text-align:center;margin-bottom:40px}
+.auth-screen-title{font-size:32px;font-weight:800;letter-spacing:-0.03em;color:#fff}
+.auth-screen-sub{font-size:13px;color:var(--t3);margin-top:6px}
+.auth-screen-card{width:100%;background:rgba(255,255,255,0.025);border:1px solid var(--bdr);border-radius:16px;overflow:hidden}
+.auth-screen-tabs{display:flex;border-bottom:1px solid var(--bdr)}
+.auth-screen-tab{flex:1;padding:14px;background:none;border:none;color:var(--t3);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;border-bottom:2px solid transparent}
+.auth-screen-tab:hover{color:var(--t1)}
+.auth-screen-tab-on{color:var(--t1)!important;border-bottom-color:var(--acc)!important;background:rgba(255,255,255,0.02)}
+.auth-screen-form{padding:28px}
+.auth-screen-form .set-field{margin-bottom:16px}
+.auth-screen-error{padding:10px 14px;background:rgba(255,77,77,0.08);border:1px solid rgba(255,77,77,0.15);border-radius:8px;color:var(--red);font-size:12px;margin-bottom:8px}
+.auth-screen-footer{text-align:center;font-size:12px;color:var(--t3);margin-top:24px;max-width:300px;line-height:1.5}
+
 .fade-in{animation:fsu 0.6s var(--ease) both}
 
 @media(max-width:1100px){.stats{grid-template-columns:repeat(2,1fr)}.proxy-grid,.acct-grid{grid-template-columns:repeat(2,1fr)}.prov-grid{grid-template-columns:repeat(2,1fr)}.how-steps{flex-wrap:wrap}.how-arrow{display:none}.ml-ws-stats{flex-wrap:wrap;gap:12px}.tl-fills-grid{grid-template-columns:1fr}.tl-stats{flex-wrap:wrap}.tl-stat{min-width:calc(25% - 1px)}.set-grid-3{grid-template-columns:1fr 1fr}.set-grid-2{grid-template-columns:1fr}}
