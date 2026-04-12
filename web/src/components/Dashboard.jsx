@@ -388,69 +388,14 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
       if (pid === "topstepx") {
         authBody = { username: brokerUsername, apiKey: brokerApiKey };
       } else if (pid === "tradovate" || pid === "ninjatrader") {
-        // OAuth flow: get the OAuth URL from backend, open popup
+        // OAuth flow: redirect the whole page to Tradovate login
         const authRes2 = await apiFetch(`/api/brokers/${pid}/auth`, {
           method: "POST",
           body: JSON.stringify({ environment: brokerEnv || "demo" }),
         });
         const authData2 = await authRes2.json();
         if (!authRes2.ok) throw new Error(authData2.message || authData2.error || "Failed to get OAuth URL");
-
-        // Open Tradovate login in a popup
-        const popup = window.open(authData2.oauthUrl, "tradovate_oauth", "width=600,height=700,menubar=no,toolbar=no");
-
-        // Listen for postMessage from the OAuth callback page
-        const token = await new Promise((resolve, reject) => {
-          const handler = (event) => {
-            const d = event.data;
-            if (d && (d.tradovate_token || d.tradovate_error)) {
-              window.removeEventListener("message", handler);
-              if (d.tradovate_token) {
-                resolve(d.tradovate_token);
-              } else {
-                reject(new Error(d.tradovate_error || "OAuth failed"));
-              }
-            }
-          };
-          window.addEventListener("message", handler);
-
-          // Also poll for popup close as fallback
-          const checkClosed = setInterval(() => {
-            if (popup && popup.closed) {
-              clearInterval(checkClosed);
-              window.removeEventListener("message", handler);
-              // Check URL params as last resort
-              const params = new URLSearchParams(window.location.search);
-              const t = params.get("tradovate_token");
-              if (t) {
-                window.history.replaceState({}, "", window.location.pathname);
-                resolve(t);
-              } else {
-                reject(new Error("OAuth window closed without completing authentication"));
-              }
-            }
-          }, 1000);
-
-          setTimeout(() => { clearInterval(checkClosed); window.removeEventListener("message", handler); reject(new Error("OAuth timed out")); }, 120000);
-        });
-
-        setBrokerToken(token);
-        // Fetch accounts with the OAuth token
-        const acctRes = await apiFetch(`/api/brokers/${pid}/accounts`, {
-          method: "POST",
-          body: JSON.stringify({ token, environment: brokerEnv || "demo" }),
-        });
-        const acctData = await acctRes.json();
-        if (!acctRes.ok) throw new Error(acctData.message || "Failed to fetch accounts");
-
-        setBrokerAccounts((acctData.accounts || []).map(a => ({
-          id: String(a.id),
-          name: a.name || a.nickname || `Account ${a.id}`,
-          balance: a.balance != null ? `$${Number(a.balance).toLocaleString()}` : "N/A",
-          rawBalance: a.balance,
-          type: a.type || "Demo",
-        })));
-        setAuthState("success");
+        window.location.href = authData2.oauthUrl;
         return;
       } else if (pid === "rithmic") {
         authBody = { username: brokerUsername, password: brokerApiKey, environment: brokerEnv || "Rithmic Paper Trading" };
@@ -2452,7 +2397,10 @@ export default function App() {
     // Check for Tradovate OAuth callback params in URL
     const params = new URLSearchParams(window.location.search);
     const tradovateToken = params.get("tradovate_token");
-    if (tradovateToken) {
+    const tradovateEnv = params.get("tradovate_env") || "demo";
+    const tradovateError = params.get("tradovate_error");
+
+    if (tradovateToken || tradovateError) {
       // Clean URL immediately
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -2478,6 +2426,39 @@ export default function App() {
               })));
             }
           }).catch(() => {});
+
+          // Handle Tradovate OAuth callback token
+          if (tradovateToken) {
+            apiFetch("/api/brokers/tradovate/accounts", {
+              method: "POST",
+              body: JSON.stringify({ token: tradovateToken, environment: tradovateEnv }),
+            }).then(r => r.ok ? r.json() : null).then(acctData => {
+              if (acctData?.accounts?.length) {
+                // Save each account to DB
+                for (const a of acctData.accounts) {
+                  apiFetch("/api/accounts", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      platform: "tradovate",
+                      role: "follower",
+                      brokerAccountId: String(a.id),
+                      label: a.nickname || a.name || `Tradovate ${a.id}`,
+                      credentials: JSON.stringify({ token: tradovateToken }),
+                    }),
+                  }).catch(() => {});
+                }
+                // Add to local state
+                setAccounts(prev => [...prev, ...acctData.accounts.map(a => ({
+                  id: `tv_${a.id}`, label: a.nickname || a.name || `Tradovate ${a.id}`,
+                  platform: "Tradovate", role: "follower", status: "connected",
+                  ip: null, proxy: "BrightData", region: "US-East",
+                  pnl: 0, trades: 0, latency: null,
+                  brokerAccountId: String(a.id),
+                  balance: a.balance, balanceDisplay: a.balance != null ? `$${Number(a.balance).toLocaleString()}` : null,
+                }))]);
+              }
+            }).catch(err => console.error("Tradovate account fetch failed:", err));
+          }
         }
         setAuthChecked(true);
       })
