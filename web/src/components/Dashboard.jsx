@@ -2035,34 +2035,35 @@ function SignalWebhookPanel() {
   const cp = (text, label) => { navigator.clipboard.writeText(text).then(() => { setCopied(label); setTimeout(() => setCopied(null), 1500); }).catch(() => {}); };
 
   return (
-    <div>
+    <div className="pp-section">
+      {/* Generated URL */}
       {generatedUrl && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div className="pp-wh-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10, marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span className="set-label" style={{ margin: 0 }}>WEBHOOK URL</span>
-            <span style={{ fontSize: 10, color: "#FFB800", fontFamily: "var(--sans)" }}>Save this. Shown only once.</span>
+            <span className="pp-key-meta" style={{ color: "#FFB800" }}>Save this. Shown only once.</span>
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{ flex: 1, fontFamily: "var(--mono)", fontSize: 12, lineHeight: 1.5, color: "var(--t1)", background: "rgba(255,255,255,0.03)", border: "1px solid var(--bdr)", borderRadius: 10, padding: "11px 14px", wordBreak: "break-all" }}>{generatedUrl.signalUrl}</div>
-            <button className="fc-btn" style={{ fontSize: 11, padding: "9px 14px", fontFamily: "var(--sans)", color: copied === "url" ? "#00E5A0" : "var(--t2)" }} onClick={() => cp(generatedUrl.signalUrl, "url")}>{copied === "url" ? "Copied" : "Copy"}</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <code className="pp-wh-url" style={{ flex: 1, background: "rgba(0,0,0,0.3)", padding: "10px 12px", borderRadius: 6, margin: 0, wordBreak: "break-all" }}>{generatedUrl.signalUrl}</code>
+            <button className="pp-pool-btn" onClick={() => cp(generatedUrl.signalUrl, "url")} style={{ padding: "8px 14px" }}>{copied === "url" ? "Copied" : "Copy"}</button>
           </div>
-          <button onClick={() => setShowPayloads(!showPayloads)} style={{ background: "none", border: "none", padding: "10px 0 0", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--sans)", fontSize: 12, color: "var(--t3)" }}>
+          <button onClick={() => setShowPayloads(!showPayloads)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--sans)", fontSize: 11, color: "var(--t3)" }}>
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: showPayloads ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}><path d="M9 18l6-6-6-6"/></svg>
             Example payloads
           </button>
           {showPayloads && (
-            <div style={{ marginTop: 10, display: "grid", gap: 8, maxWidth: 600 }}>
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--bdr)", borderRadius: 10, padding: "10px 14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span className="set-label" style={{ margin: 0 }}>TRADINGVIEW STRATEGY</span>
-                  <button className="fc-btn" style={{ fontSize: 10, padding: "3px 10px" }} onClick={() => cp(generatedUrl.instructions.tradingview.message_format, "tv")}>{copied === "tv" ? "Copied" : "Copy"}</button>
+            <div style={{ display: "grid", gap: 8 }}>
+              <div className="pp-key-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="pp-pool-meta-label">TRADINGVIEW STRATEGY</span>
+                  <button className="pp-pool-btn" onClick={() => cp(generatedUrl.instructions.tradingview.message_format, "tv")} style={{ fontSize: 9 }}>{copied === "tv" ? "Copied" : "Copy"}</button>
                 </div>
                 <pre style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t2)", margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{generatedUrl.instructions.tradingview.message_format}</pre>
               </div>
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--bdr)", borderRadius: 10, padding: "10px 14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span className="set-label" style={{ margin: 0 }}>cURL</span>
-                  <button className="fc-btn" style={{ fontSize: 10, padding: "3px 10px" }} onClick={() => cp(generatedUrl.instructions.custom_curl, "curl")}>{copied === "curl" ? "Copied" : "Copy"}</button>
+              <div className="pp-key-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="pp-pool-meta-label">cURL</span>
+                  <button className="pp-pool-btn" onClick={() => cp(generatedUrl.instructions.custom_curl, "curl")} style={{ fontSize: 9 }}>{copied === "curl" ? "Copied" : "Copy"}</button>
                 </div>
                 <pre style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t2)", margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{generatedUrl.instructions.custom_curl}</pre>
               </div>
@@ -2071,48 +2072,45 @@ function SignalWebhookPanel() {
         </div>
       )}
 
-      {signalKeys.map((k, i) => (
-        <div key={k.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: i === 0 ? "1px solid var(--bdr)" : "none", borderBottom: "1px solid var(--bdr)" }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)", fontFamily: "var(--sans)" }}>{k.name}</div>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t3)", marginTop: 2 }}>{k.key_prefix}</div>
+      {/* Active keys */}
+      {signalKeys.map(k => (
+        <div key={k.id} className="pp-key-row" style={{ marginBottom: 8 }}>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{k.name}</span>
+            <span className="pp-key-meta" style={{ marginLeft: 10 }}>{k.key_prefix}</span>
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: "#00E5A0", fontFamily: "var(--sans)" }}>ACTIVE</span>
-            <button className="fc-btn fc-btn-danger" style={{ fontSize: 10, padding: "4px 10px" }} onClick={() => deleteKey(k.id)}>Revoke</button>
-          </div>
+          <span className="pp-pool-status pp-pool-active">Active</span>
+          <button className="pp-pool-btn pp-pool-btn-del" onClick={() => deleteKey(k.id)}>Revoke</button>
         </div>
       ))}
 
-      <div style={{ paddingTop: signalKeys.length > 0 ? 14 : 0 }}>
-        {showCreate ? (
-          <div>
-            <div className="set-field" style={{ marginBottom: 12 }}>
-              <label className="set-label">STRATEGY NAME</label>
-              <input className="set-input" placeholder="e.g. NQ Scalper, ES Breakout" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createSignalKey()} autoFocus />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-primary" onClick={createSignalKey}><span>Generate Webhook URL</span><span className="btn-aw"><span className="btn-ar">&#10003;</span></span></button>
-              <button className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
-            </div>
+      {/* Create form */}
+      {!showCreate ? (
+        <button className="pp-add-btn" onClick={() => setShowCreate(true)}>+ New Signal Webhook</button>
+      ) : (
+        <div className="pp-add-form fade-in">
+          <div className="set-field">
+            <label className="set-label">STRATEGY NAME</label>
+            <input className="set-input" placeholder="e.g. NQ Scalper, ES Breakout" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createSignalKey()} autoFocus />
           </div>
-        ) : (
-          <button className="pp-add-btn" onClick={() => setShowCreate(true)} style={{ width: "100%" }}>+ New Signal Webhook</button>
-        )}
-      </div>
+          <div className="pp-add-actions">
+            <button className="btn-primary" onClick={createSignalKey}><span>Generate Webhook URL</span><span className="btn-aw"><span className="btn-ar">&#10003;</span></span></button>
+            <button className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
+      {/* Signal history */}
       {signalHistory.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <span className="set-label">RECENT SIGNALS</span>
-          <div style={{ marginTop: 6 }}>
-            {signalHistory.slice(0, 5).map((s, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "100px 1fr auto", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--bdr)", alignItems: "center" }}>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600, color: s.signal_type?.includes("ERROR") || s.signal_type?.includes("FAILED") ? "var(--red)" : "#00E5A0" }}>{s.signal_type?.replace("WEBHOOK_", "")}</span>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t2)" }}>{s.contract_id} {s.side} x{s.qty}</span>
-                <span style={{ fontFamily: "var(--sans)", fontSize: 11, color: "var(--t3)" }}>{new Date(s.timestamp).toLocaleTimeString()}</span>
-              </div>
-            ))}
-          </div>
+        <div style={{ marginTop: 16 }}>
+          <div className="set-label">RECENT SIGNALS</div>
+          {signalHistory.slice(0, 5).map((s, i) => (
+            <div key={i} className="pp-key-row" style={{ marginBottom: 4, padding: "6px 12px" }}>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600, color: s.signal_type?.includes("ERROR") || s.signal_type?.includes("FAILED") ? "var(--red)" : "#00E5A0", minWidth: 80 }}>{s.signal_type?.replace("WEBHOOK_", "")}</span>
+              <span className="pp-key-meta" style={{ flex: 1 }}>{s.contract_id} {s.side} x{s.qty}</span>
+              <span className="pp-key-meta">{new Date(s.timestamp).toLocaleTimeString()}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
