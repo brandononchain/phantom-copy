@@ -2447,7 +2447,7 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
             <h2 className="card-t">Signal Webhooks</h2>
             <span className="badge" style={{ color: "#00E5A0", borderColor: "rgba(0,229,160,0.2)", background: "rgba(0,229,160,0.08)" }}>TRADINGVIEW</span>
           </div>
-          <p className="pg-sub" style={{ margin: "0 0 16px" }}>Receive trading signals from TradingView, TrendSpider, or custom code. Signals execute on your master account and auto-copy to all followers.</p>
+          <p className="pg-sub" style={{ margin: "0 0 16px", fontFamily: "var(--sans)" }}>Receive trading signals from TradingView, TrendSpider, or custom code. Signals execute on your master account and auto-copy to all followers.</p>
           <SignalWebhookPanel />
         </div>
       </div>
@@ -3234,7 +3234,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-s
 .page{position:relative;z-index:1;padding:40px 48px 80px;max-width:1280px}
 .pg-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:40px}
 .pg-title{font-size:28px;font-weight:700;letter-spacing:-0.03em;line-height:1.1}
-.pg-sub{font-size:13.5px;color:var(--t3);margin-top:6px}.pg-acts{display:flex;gap:10px;align-items:center}
+.pg-sub{font-family:var(--sans);font-size:13.5px;color:var(--t3);margin-top:6px}.pg-acts{display:flex;gap:10px;align-items:center}
 
 /* Buttons */
 .btn-primary{display:inline-flex;align-items:center;gap:8px;padding:10px 12px 10px 20px;background:var(--acc);color:#fff;border:none;border-radius:100px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.4s var(--ease);white-space:nowrap}
