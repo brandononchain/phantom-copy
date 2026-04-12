@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Phantom Copy | The Stealth Standard for Modern Prop Trading',
+  title: 'Tradevanish | The Stealth Standard for Modern Prop Trading',
   description: 'Copy trades across unlimited accounts with dedicated residential proxy IP isolation per account.',
 };
 

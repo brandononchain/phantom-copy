@@ -123,8 +123,8 @@ function Sidebar({ active, onNav, masterAccount, listenerState, currentPlan }) {
   return (
     <nav className="sidebar">
       <div className="s-logo">
-        <img src="/logo.png" alt="Phantom Copy" width="28" height="28" style={{ borderRadius: 6 }} />
-        <span className="s-logo-t">Phantom Copy</span>
+        <img src="/logo.png" alt="Tradevanish" width="28" height="28" style={{ borderRadius: 6 }} />
+        <span className="s-logo-t">Tradevanish</span>
       </div>
       <div className="s-nav">
         {NAV.map(n => (
@@ -596,7 +596,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
               </div>
               <div className="modal-note">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
-                <span>You log in directly through the broker. Phantom Copy never sees or stores your password.</span>
+                <span>You log in directly through the broker. Tradevanish never sees or stores your password.</span>
               </div>
             </div>
           )}
@@ -707,7 +707,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
           {step === "select_account" && (
             <div className="modal-body">
               <div className="sa-section fade-in">
-                <p className="sa-desc">We found {brokerAccounts.length} accounts on your {platform?.name} login. Select the one you trade from. Phantom Copy will listen for every order placed on this account.</p>
+                <p className="sa-desc">We found {brokerAccounts.length} accounts on your {platform?.name} login. Select the one you trade from. Tradevanish will listen for every order placed on this account.</p>
                 <div className="sa-accounts">
                   {brokerAccounts.map((ba, i) => (
                     <button key={ba.id} className={cn("sa-account", selectedBrokerAccount?.id === ba.id && "sa-account-on")} onClick={() => setSelectedBrokerAccount(ba)} style={{ animationDelay: `${i * 60}ms` }}>
@@ -1788,7 +1788,7 @@ function BillingModal({ onClose, currentPlan, onPlanChange, initialTab }) {
                 <div className="bill-card-form">
                   <div className="bill-stripe-badge">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 12l3 3 5-5"/></svg>
-                    <span>Secured by Stripe. Card data never touches Phantom Copy servers.</span>
+                    <span>Secured by Stripe. Card data never touches Tradevanish servers.</span>
                   </div>
                   <div className="set-field" style={{ marginBottom: 14 }}>
                     <label className="set-label">CARD NUMBER</label>
@@ -1844,8 +1844,8 @@ function OnboardingOverlay({ onComplete }) {
   const [step, setStep] = useState(0);
 
   const STEPS = [
-    { title: "Welcome to Phantom Copy", sub: "Copy trades across unlimited accounts, each with a unique IP address.", icon: "logo",
-      body: "Phantom Copy connects to your broker, watches your master account for trades, and replicates them to every follower account instantly. Each account routes through its own dedicated residential proxy so every connection looks independent." },
+    { title: "Welcome to Tradevanish", sub: "Copy trades across unlimited accounts, each with a unique IP address.", icon: "logo",
+      body: "Tradevanish connects to your broker, watches your master account for trades, and replicates them to every follower account instantly. Each account routes through its own dedicated residential proxy so every connection looks independent." },
     { title: "How It Works", sub: "Three things happen when you set up:", icon: "flow",
       items: [
         { num: "1", t: "Connect your broker", d: "Sign in with Tradovate or Rithmic. OAuth flow means your password never touches our servers." },
@@ -1875,7 +1875,7 @@ function OnboardingOverlay({ onComplete }) {
           {/* Step Icon */}
           <div className="onb-icon-wrap">
             {s.icon === "logo" && (
-              <img src="/logo.png" alt="Phantom Copy" width="48" height="48" style={{ borderRadius: 10 }} />
+              <img src="/logo.png" alt="Tradevanish" width="48" height="48" style={{ borderRadius: 10 }} />
             )}
             {s.icon === "flow" && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M2 12h20"/><path d="M12 2c2.5 3 4 6.5 4 10s-1.5 7-4 10c-2.5-3-4-6.5-4-10s1.5-7 4-10z"/></svg>
@@ -2165,9 +2165,9 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
               <div className="pp-api-info">
                 <div className="pp-api-endpoint">
                   <span className="pp-api-method">BASE URL</span>
-                  <code className="pp-api-url">https://api.phantomcopy.com/v1</code>
+                  <code className="pp-api-url">https://api.tradevanish.com/v1</code>
                 </div>
-                <p className="pp-api-desc">Programmatic access to accounts, trades, proxies, and listener controls. Full API reference at docs.phantomcopy.com</p>
+                <p className="pp-api-desc">Programmatic access to accounts, trades, proxies, and listener controls. Full API reference at docs.tradevanish.com</p>
               </div>
 
               <div className="pp-api-keys">
@@ -2300,7 +2300,7 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
         {!showSignOut ? (
           <button className="prof-signout-btn" onClick={() => setShowSignOut(true)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>
         ) : (
-          <div className="prof-signout-confirm fade-in"><p className="prof-signout-msg">Sign out of Phantom Copy? Active listeners will stop.</p><div className="prof-signout-actions"><button className="prof-signout-yes" onClick={onSignOut}>Yes, Sign Out</button><button className="btn-ghost" onClick={() => setShowSignOut(false)}>Cancel</button></div></div>
+          <div className="prof-signout-confirm fade-in"><p className="prof-signout-msg">Sign out of Tradevanish? Active listeners will stop.</p><div className="prof-signout-actions"><button className="prof-signout-yes" onClick={onSignOut}>Yes, Sign Out</button><button className="btn-ghost" onClick={() => setShowSignOut(false)}>Cancel</button></div></div>
         )}
       </div>
 
@@ -2347,7 +2347,7 @@ function AuthScreen({ onAuth }) {
     <div className="auth-screen">
       <div className="auth-screen-inner fade-in">
         <div className="auth-screen-brand">
-          <h1 className="auth-screen-title">Phantom Copy</h1>
+          <h1 className="auth-screen-title">Tradevanish</h1>
           <p className="auth-screen-sub">The Stealth Standard for Modern Prop Trading</p>
         </div>
 
@@ -2588,7 +2588,7 @@ export default function App() {
 
   // Auth gate
   if (!authChecked) {
-    return (<><style>{STYLES}</style><div className="auth-screen"><div className="auth-screen-inner"><div className="auth-screen-brand"><h1 className="auth-screen-title">Phantom Copy</h1><p className="auth-screen-sub">Loading...</p></div></div></div></>);
+    return (<><style>{STYLES}</style><div className="auth-screen"><div className="auth-screen-inner"><div className="auth-screen-brand"><h1 className="auth-screen-title">Tradevanish</h1><p className="auth-screen-sub">Loading...</p></div></div></div></>);
   }
 
   if (!user) {
