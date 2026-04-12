@@ -1999,6 +1999,116 @@ function OnboardingOverlay({ onComplete }) {
 }
 
 // ─── Profile Page ────────────────────────────────────────────────────────────
+// ─── Signal Webhook Panel ────────────────────────────────────────────────────
+function SignalWebhookPanel() {
+  const [signalKeys, setSignalKeys] = useState([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [generatedUrl, setGeneratedUrl] = useState(null);
+  const [showPayloads, setShowPayloads] = useState(false);
+  const [signalHistory, setSignalHistory] = useState([]);
+
+  useEffect(() => {
+    apiFetch("/api/signals/keys").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.keys) setSignalKeys(d.keys);
+    }).catch(() => {});
+    apiFetch("/api/signals/history").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.history) setSignalHistory(d.history);
+    }).catch(() => {});
+  }, []);
+
+  const createSignalKey = async () => {
+    try {
+      const r = await apiFetch("/api/signals/keys", { method: "POST", body: JSON.stringify({ name: newName || "TradingView Signal" }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setGeneratedUrl(d);
+      setSignalKeys(prev => [...prev, { id: Date.now(), name: d.name, key_prefix: d.signalKey.slice(0, 12) + "...", status: "active" }]);
+      setShowCreate(false); setNewName("");
+    } catch (err) { alert("Failed: " + err.message); }
+  };
+
+  const deleteKey = async (id) => {
+    if (!confirm("Revoke this signal key? TradingView alerts using this URL will stop working.")) return;
+    await apiFetch(`/api/signals/keys/${id}`, { method: "DELETE" });
+    setSignalKeys(prev => prev.filter(k => k.id !== id));
+  };
+
+  const copyText = (text) => { navigator.clipboard.writeText(text).then(() => {}).catch(() => {}); };
+
+  return (
+    <div>
+      {generatedUrl && (
+        <div style={{ background: "rgba(0,229,160,0.06)", border: "1px solid rgba(0,229,160,0.15)", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#00E5A0", letterSpacing: "0.5px" }}>YOUR SIGNAL WEBHOOK URL</span>
+            <span style={{ fontSize: 10, color: "var(--t3)", background: "rgba(255,180,0,0.1)", padding: "2px 6px", borderRadius: 4 }}>Save this. Full key shown only once.</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <code style={{ flex: 1, fontFamily: "var(--mono)", fontSize: 12, color: "var(--t1)", background: "rgba(0,0,0,0.3)", padding: "10px 12px", borderRadius: 8, wordBreak: "break-all" }}>{generatedUrl.signalUrl}</code>
+            <button className="fc-btn" style={{ whiteSpace: "nowrap", padding: "10px 14px" }} onClick={() => copyText(generatedUrl.signalUrl)}>Copy URL</button>
+          </div>
+          <button style={{ background: "none", border: "none", color: "#3B82F6", fontSize: 12, cursor: "pointer", marginTop: 12, padding: 0 }} onClick={() => setShowPayloads(!showPayloads)}>
+            {showPayloads ? "Hide" : "Show"} example payloads
+          </button>
+          {showPayloads && (
+            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+              <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--t2)", letterSpacing: "0.5px" }}>TRADINGVIEW STRATEGY</span>
+                  <button className="fc-btn" style={{ fontSize: 10, padding: "3px 8px" }} onClick={() => copyText(generatedUrl.instructions.tradingview.message_format)}>Copy</button>
+                </div>
+                <pre style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t2)", margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{generatedUrl.instructions.tradingview.message_format}</pre>
+              </div>
+              <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--t2)", letterSpacing: "0.5px" }}>CUSTOM / cURL</span>
+                  <button className="fc-btn" style={{ fontSize: 10, padding: "3px 8px" }} onClick={() => copyText(generatedUrl.instructions.custom_curl)}>Copy</button>
+                </div>
+                <pre style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--t2)", margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{generatedUrl.instructions.custom_curl}</pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {signalKeys.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          {signalKeys.map(k => (
+            <div key={k.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--bdr)" }}>
+              <div><div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{k.name}</div><div style={{ fontSize: 11, fontFamily: "var(--mono)", color: "var(--t3)", marginTop: 2 }}>{k.key_prefix}</div></div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ fontSize: 10, color: "#00E5A0" }}>Active</span><button className="fc-btn fc-btn-danger" style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => deleteKey(k.id)}>Revoke</button></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showCreate ? (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <div className="set-field" style={{ flex: 1, marginBottom: 0 }}><label className="set-label">SIGNAL NAME</label><input className="set-input" placeholder="e.g. NQ Scalper Strategy" value={newName} onChange={e => setNewName(e.target.value)} /></div>
+          <button className="btn-primary" onClick={createSignalKey} style={{ height: 40, whiteSpace: "nowrap" }}><span>Generate URL</span><span className="btn-aw"><span className="btn-ar">&#10003;</span></span></button>
+          <button className="btn-ghost" onClick={() => setShowCreate(false)} style={{ height: 40 }}>Cancel</button>
+        </div>
+      ) : (
+        <button className="btn-primary" onClick={() => setShowCreate(true)}><span>+ New Signal Webhook</span><span className="btn-aw"><span className="btn-ar">&#8594;</span></span></button>
+      )}
+
+      {signalHistory.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)", letterSpacing: "0.5px", marginBottom: 8 }}>RECENT SIGNALS</div>
+          {signalHistory.slice(0, 5).map((s, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--bdr)", fontSize: 12 }}>
+              <span style={{ fontFamily: "var(--mono)", color: s.signal_type?.includes("ERROR") || s.signal_type?.includes("FAILED") ? "var(--red)" : "#00E5A0" }}>{s.signal_type}</span>
+              <span style={{ color: "var(--t2)" }}>{s.contract_id} {s.side} {s.qty}</span>
+              <span style={{ color: "var(--t3)" }}>{new Date(s.timestamp).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
@@ -2298,6 +2408,20 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
               <p>Provision dedicated proxy pools with your preferred provider and region. Assign pools to specific accounts for maximum control over IP isolation.</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ─── TradingView Signal Webhooks ─────────────────────────────────── */}
+      <div className="card-sh">
+        <div className="card-in">
+          <div className="card-hd">
+            <h2 className="card-t">Signal Webhooks</h2>
+            <span className="badge" style={{ color: "#00E5A0", borderColor: "rgba(0,229,160,0.2)", background: "rgba(0,229,160,0.08)" }}>TRADINGVIEW</span>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--t3)", margin: "0 0 16px", lineHeight: 1.6 }}>
+            Receive trading signals from TradingView, TrendSpider, or custom code. Signals execute on your master account and auto-copy to all followers.
+          </p>
+          <SignalWebhookPanel />
         </div>
       </div>
 

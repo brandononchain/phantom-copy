@@ -20,6 +20,7 @@ import brokerRoutes from './routes/brokers.js';
 import listenerRoutes from './routes/listeners.js';
 import settingsRoutes from './routes/settings.js';
 import notificationRoutes from './routes/notifications.js';
+import signalRoutes from './routes/signals.js';
 
 const app = express();
 
@@ -80,6 +81,7 @@ app.use('/api/brokers', brokerRoutes);
 app.use('/api/listeners', listenerRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/signals', signalRoutes);
 
 // ── 404 ──────────────────────────────────────────────────────────────────────
 
