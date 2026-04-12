@@ -210,24 +210,40 @@ router.post('/change-password', authRequired, async (req, res) => {
   }
 });
 
-// ── Admin: Upgrade plan (temporary) ──────────────────────────────────────────
+// ── Admin: Upgrade plan / reset password (temporary) ─────────────────────────
 
 router.post('/admin/upgrade', async (req, res) => {
-  const { email, plan, adminKey } = req.body;
-  // Simple admin key check
+  const { email, plan, adminKey, newPassword } = req.body;
   if (adminKey !== 'pc_admin_2026') {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
   try {
+    const updates = [];
+    const params = [];
+    let paramIdx = 1;
+
+    if (plan) {
+      updates.push(`plan = $${paramIdx++}`);
+      params.push(plan);
+    }
+    if (newPassword) {
+      const hash = await bcrypt.hash(newPassword, 12);
+      updates.push(`password_hash = $${paramIdx++}`);
+      params.push(hash);
+    }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+    params.push(email);
     const result = await query(
-      'UPDATE users SET plan = $1 WHERE email = $2 RETURNING id, email, name, plan',
-      [plan, email]
+      `UPDATE users SET ${updates.join(', ')} WHERE email = $${paramIdx} RETURNING id, email, name, plan`,
+      params
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    res.json({ user: result.rows[0] });
+    res.json({ user: result.rows[0], passwordReset: !!newPassword });
   } catch (err) {
-    res.status(500).json({ error: 'Upgrade failed' });
+    res.status(500).json({ error: 'Update failed' });
   }
 });
 
