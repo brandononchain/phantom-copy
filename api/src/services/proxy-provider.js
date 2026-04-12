@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Phantom Copy: Proxy Provider Service
+// Tradevanish: Proxy Provider Service
 // ─────────────────────────────────────────────────────────────────────────────
 // Real residential proxy IP assignment via BrightData, Oxylabs, SmartProxy, IPRoyal.
 // Each trading account gets a dedicated sticky session through a residential proxy.

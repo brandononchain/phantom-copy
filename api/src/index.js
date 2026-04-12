@@ -113,7 +113,7 @@ async function start() {
 
   const port = config.port;
   app.listen(port, '0.0.0.0', () => {
-    console.log(`[API] Phantom Copy API listening on port ${port}`);
+    console.log(`[API] Tradevanish API listening on port ${port}`);
     console.log(`[API] Env: ${config.nodeEnv} | CORS: ${config.cors.origin}`);
   });
 }

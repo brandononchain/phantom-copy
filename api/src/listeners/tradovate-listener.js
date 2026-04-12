@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// PhantomCopy Master Listener Service
+// Tradevanish Master Listener Service
 // ─────────────────────────────────────────────────────────────────────────────
 // This is the core backend service that:
 //   1. Opens a proxied WebSocket to the master's broker
@@ -142,7 +142,7 @@ export class TradovateMasterListener extends EventEmitter {
       this.ws = new WebSocket(TRADOVATE_WS_URL, {
         agent: this.proxyAgent, // All traffic routed through dedicated IP
         headers: {
-          'User-Agent': 'PhantomCopy/1.0',
+          'User-Agent': 'Tradevanish/1.0',
         },
       });
 

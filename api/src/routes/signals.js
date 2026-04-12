@@ -22,22 +22,39 @@ const router = Router();
 // This maps common futures symbols to their IDs
 
 const SYMBOL_MAP = {
-  // E-mini futures
-  'ES':   { projectx: 1, tradovate: 'ES',  name: 'E-mini S&P 500' },
-  'NQ':   { projectx: 2, tradovate: 'NQ',  name: 'E-mini Nasdaq 100' },
-  'YM':   { projectx: 4, tradovate: 'YM',  name: 'E-mini Dow' },
-  'RTY':  { projectx: 3, tradovate: 'RTY', name: 'E-mini Russell 2000' },
-  'GC':   { projectx: 5, tradovate: 'GC',  name: 'Gold' },
-  'CL':   { projectx: 6, tradovate: 'CL',  name: 'Crude Oil' },
-  'SI':   { projectx: 7, tradovate: 'SI',  name: 'Silver' },
+  // E-mini futures - TopStepX uses CON.F.US.{SYMBOL}.{MONTH_CODE}{YEAR} format
+  // We use a function to resolve the current front month
+  'ES':   { tradovate: 'ES',  name: 'E-mini S&P 500' },
+  'NQ':   { tradovate: 'NQ',  name: 'E-mini Nasdaq 100' },
+  'YM':   { tradovate: 'YM',  name: 'E-mini Dow' },
+  'RTY':  { tradovate: 'RTY', name: 'E-mini Russell 2000' },
+  'GC':   { tradovate: 'GC',  name: 'Gold' },
+  'CL':   { tradovate: 'CL',  name: 'Crude Oil' },
+  'SI':   { tradovate: 'SI',  name: 'Silver' },
   // Micro futures
-  'MES':  { projectx: 11, tradovate: 'MES', name: 'Micro E-mini S&P 500' },
-  'MNQ':  { projectx: 12, tradovate: 'MNQ', name: 'Micro E-mini Nasdaq 100' },
-  'MYM':  { projectx: 14, tradovate: 'MYM', name: 'Micro E-mini Dow' },
-  'M2K':  { projectx: 13, tradovate: 'M2K', name: 'Micro E-mini Russell' },
-  'MGC':  { projectx: 15, tradovate: 'MGC', name: 'Micro Gold' },
-  'MCL':  { projectx: 16, tradovate: 'MCL', name: 'Micro Crude Oil' },
+  'MES':  { tradovate: 'MES', name: 'Micro E-mini S&P 500' },
+  'MNQ':  { tradovate: 'MNQ', name: 'Micro E-mini Nasdaq 100' },
+  'MYM':  { tradovate: 'MYM', name: 'Micro E-mini Dow' },
+  'M2K':  { tradovate: 'M2K', name: 'Micro E-mini Russell' },
+  'MGC':  { tradovate: 'MGC', name: 'Micro Gold' },
+  'MCL':  { tradovate: 'MCL', name: 'Micro Crude Oil' },
 };
+
+// TopStepX uses CON.F.US.{SYMBOL}.{MONTH_CODE}{YY} format
+// Month codes: F=Jan, G=Feb, H=Mar, J=Apr, K=May, M=Jun, N=Jul, Q=Aug, U=Sep, V=Oct, X=Nov, Z=Dec
+function getProjectXContractId(ticker) {
+  const months = ['F','G','H','J','K','M','N','Q','U','V','X','Z'];
+  const now = new Date();
+  // Get front month (current or next month)
+  let monthIdx = now.getMonth();
+  let year = now.getFullYear() % 100;
+  // If we're past the 15th, use next month
+  if (now.getDate() > 15) {
+    monthIdx = (monthIdx + 1) % 12;
+    if (monthIdx === 0) year++;
+  }
+  return `CON.F.US.${ticker}.${months[monthIdx]}${year}`;
+}
 
 // ── Parse TradingView/TrendSpider/Custom signal ──────────────────────────────
 
@@ -289,7 +306,8 @@ router.post('/:signalKey', async (req, res) => {
   let contractId;
 
   if (master.platform === 'topstepx') {
-    contractId = symbolInfo?.projectx || signal.ticker;
+    // TopStepX uses CON.F.US.NQ.M26 format
+    contractId = getProjectXContractId(signal.ticker);
   } else if (master.platform === 'tradovate') {
     contractId = symbolInfo?.tradovate || signal.ticker;
   } else {
@@ -305,7 +323,7 @@ router.post('/:signalKey', async (req, res) => {
       // Place via TopStepX REST API
       const orderBody = {
         accountId: parseInt(master.broker_account_id),
-        contractId: typeof contractId === 'number' ? contractId : parseInt(contractId),
+        contractId: contractId, // String like "CON.F.US.MNQ.M26"
         type: signal.orderType === 'Market' ? 2 : signal.orderType === 'Limit' ? 1 : 4,
         side: signal.side === 'Buy' ? 0 : 1,
         size: signal.qty,

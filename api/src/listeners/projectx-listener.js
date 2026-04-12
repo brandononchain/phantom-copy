@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// PhantomCopy: ProjectX (TopStepX) Master Listener
+// Tradevanish: ProjectX (TopStepX) Master Listener
 // ─────────────────────────────────────────────────────────────────────────────
 // Connects to the ProjectX Gateway API via SignalR User Hub.
 // Auth: Username + API key -> JWT token (24h expiry)

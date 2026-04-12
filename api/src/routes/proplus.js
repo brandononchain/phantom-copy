@@ -157,13 +157,13 @@ router.post('/webhooks/:id/test', authRequired, requirePlan('webhooks'), async (
 
   const webhook = wh.rows[0];
   const timestamp = Math.floor(Date.now() / 1000);
-  const body = JSON.stringify({ event: 'test', timestamp, data: { message: 'Webhook test from Phantom Copy' } });
+  const body = JSON.stringify({ event: 'test', timestamp, data: { message: 'Webhook test from Tradevanish' } });
   const signature = crypto.createHmac('sha256', webhook.secret).update(`${timestamp}.${body}`).digest('hex');
 
   try {
     const response = await fetch(webhook.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-PhantomCopy-Signature': signature, 'X-PhantomCopy-Event': 'test' },
+      headers: { 'Content-Type': 'application/json', 'X-Tradevanish-Signature': signature, 'X-Tradevanish-Event': 'test' },
       body,
       signal: AbortSignal.timeout(10000),
     });

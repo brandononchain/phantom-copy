@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Phantom Copy: Listener Manager
+// Tradevanish: Listener Manager
 // ─────────────────────────────────────────────────────────────────────────────
 // Manages the lifecycle of master account WebSocket listeners.
 // Starts/stops SignalR connections, stores session state in DB,

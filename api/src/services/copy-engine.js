@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Phantom Copy: Copy Execution Engine
+// Tradevanish: Copy Execution Engine
 // ─────────────────────────────────────────────────────────────────────────────
 // Receives copy-signal events from master listeners and replicates trades
 // across all follower accounts, each through their dedicated proxy IP.
