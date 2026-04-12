@@ -2105,13 +2105,12 @@ function SignalWebhookPanel() {
 
       {/* Create new key */}
       {showCreate ? (
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <div className="set-field" style={{ flex: 1, marginBottom: 0 }}>
-            <label className="set-label">STRATEGY NAME</label>
-            <input className="set-input" placeholder="e.g. NQ Scalper, ES Breakout" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createSignalKey()} />
+        <div>
+          <div className="set-field"><label className="set-label">STRATEGY NAME</label><input className="set-input" placeholder="e.g. NQ Scalper, ES Breakout" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createSignalKey()} /></div>
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <button className="btn-primary" onClick={createSignalKey}><span>Generate Webhook URL</span><span className="btn-aw"><span className="btn-ar">&#10003;</span></span></button>
+            <button className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
           </div>
-          <button className="btn-primary" onClick={createSignalKey} style={{ height: 40 }}><span>Generate</span><span className="btn-aw"><span className="btn-ar">&#10003;</span></span></button>
-          <button className="btn-ghost" onClick={() => setShowCreate(false)} style={{ height: 40 }}>Cancel</button>
         </div>
       ) : (
         <button className="pp-add-btn" onClick={() => setShowCreate(true)}>+ New Signal Webhook</button>
