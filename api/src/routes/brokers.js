@@ -84,12 +84,55 @@ router.post('/topstepx/accounts', authRequired, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.post('/tradovate/auth', authRequired, async (req, res) => {
-  const { username, password, environment } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  const { username, password, environment, pTicket, deviceId, mfaCode } = req.body;
 
   const baseUrl = environment === 'live' ? APIS.tradovate.live : APIS.tradovate.demo;
 
+  // Step 2: MFA code submission
+  if (pTicket && mfaCode) {
+    try {
+      const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: username,
+          password: password,
+          appId: 'PhantomCopy',
+          appVersion: '1.0',
+          deviceId: deviceId || undefined,
+          cid: 0,
+          sec: '',
+          'p-ticket': pTicket,
+          'p-captcha': mfaCode,
+        }),
+      });
+
+      const data = await r.json();
+
+      if (!r.ok || !data.accessToken) {
+        return res.status(401).json({
+          error: 'mfa_failed',
+          message: data.errorText || 'Invalid verification code. Check your email and try again.',
+        });
+      }
+
+      return res.json({
+        token: data.accessToken,
+        expiresAt: data.expirationTime,
+        userId: data.userId,
+        platform: 'tradovate',
+      });
+    } catch (err) {
+      return res.status(502).json({ error: 'gateway_error', message: `Tradovate unreachable: ${err.message}` });
+    }
+  }
+
+  // Step 1: Initial auth (may trigger MFA)
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+
   try {
+    const devId = `pc_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
     const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -98,6 +141,7 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
         password: password,
         appId: 'PhantomCopy',
         appVersion: '1.0',
+        deviceId: devId,
         cid: 0,
         sec: '',
       }),
@@ -105,10 +149,21 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
 
     const data = await r.json();
 
+    // MFA required - return p-ticket to frontend
+    if (data['p-ticket']) {
+      return res.status(401).json({
+        error: 'mfa_required',
+        mfaRequired: true,
+        pTicket: data['p-ticket'],
+        deviceId: devId,
+        message: 'Multi-factor authentication required. Check your email for the verification code.',
+      });
+    }
+
     if (!r.ok || !data.accessToken) {
       return res.status(401).json({
         error: 'auth_failed',
-        message: data.errorText || data['p-ticket'] ? 'Multi-factor authentication required. Complete MFA in Tradovate first.' : 'Invalid credentials',
+        message: data.errorText || 'Invalid credentials. Check your username and password.',
       });
     }
 
@@ -233,40 +288,49 @@ router.post('/rithmic/accounts', authRequired, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.post('/ninjatrader/auth', authRequired, async (req, res) => {
-  const { username, password, environment } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-
+  const { username, password, environment, pTicket, deviceId, mfaCode } = req.body;
   const baseUrl = environment === 'live' ? APIS.tradovate.live : APIS.tradovate.demo;
 
+  // Step 2: MFA code submission
+  if (pTicket && mfaCode) {
+    try {
+      const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: username, password, appId: 'PhantomCopy', appVersion: '1.0',
+          deviceId: deviceId || undefined, cid: 0, sec: '',
+          'p-ticket': pTicket, 'p-captcha': mfaCode,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.accessToken) {
+        return res.status(401).json({ error: 'mfa_failed', message: data.errorText || 'Invalid verification code.' });
+      }
+      return res.json({ token: data.accessToken, expiresAt: data.expirationTime, userId: data.userId, platform: 'ninjatrader' });
+    } catch (err) {
+      return res.status(502).json({ error: 'gateway_error', message: `NinjaTrader API unreachable: ${err.message}` });
+    }
+  }
+
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+
   try {
+    const devId = `pc_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: username,
-        password: password,
-        appId: 'PhantomCopy',
-        appVersion: '1.0',
-        cid: 0,
-        sec: '',
-      }),
+      body: JSON.stringify({ name: username, password, appId: 'PhantomCopy', appVersion: '1.0', deviceId: devId, cid: 0, sec: '' }),
     });
-
     const data = await r.json();
 
-    if (!r.ok || !data.accessToken) {
-      return res.status(401).json({
-        error: 'auth_failed',
-        message: data.errorText || 'Invalid NinjaTrader credentials. Use your Tradovate-linked login.',
-      });
+    if (data['p-ticket']) {
+      return res.status(401).json({ error: 'mfa_required', mfaRequired: true, pTicket: data['p-ticket'], deviceId: devId, message: 'Check your email for the verification code.' });
     }
-
-    res.json({
-      token: data.accessToken,
-      expiresAt: data.expirationTime,
-      userId: data.userId,
-      platform: 'ninjatrader',
-    });
+    if (!r.ok || !data.accessToken) {
+      return res.status(401).json({ error: 'auth_failed', message: data.errorText || 'Invalid NinjaTrader credentials.' });
+    }
+    res.json({ token: data.accessToken, expiresAt: data.expirationTime, userId: data.userId, platform: 'ninjatrader' });
   } catch (err) {
     res.status(502).json({ error: 'gateway_error', message: `NinjaTrader API unreachable: ${err.message}` });
   }
