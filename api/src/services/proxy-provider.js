@@ -37,8 +37,8 @@ const PROVIDERS = {
       if (geo.state) user += `-state-${geo.state}`;
       return {
         host: 'brd.superproxy.io',
-        port: 22225,
-        url: `http://${user}:${creds.password}@brd.superproxy.io:22225`,
+        port: 33335,
+        url: `http://${user}:${creds.password}@brd.superproxy.io:33335`,
         username: user,
         password: creds.password,
       };
