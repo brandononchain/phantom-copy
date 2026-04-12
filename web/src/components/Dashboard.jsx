@@ -2426,7 +2426,6 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
             <h2 className="card-t">Signal Webhooks</h2>
             <span className="badge" style={{ color: "#00E5A0", borderColor: "rgba(0,229,160,0.2)", background: "rgba(0,229,160,0.08)" }}>TRADINGVIEW</span>
           </div>
-          <p className="pg-sub" style={{ margin: "0 0 16px", fontFamily: "var(--sans)" }}>Receive trading signals from TradingView, TrendSpider, or custom code. Signals execute on your master account and auto-copy to all followers.</p>
           <SignalWebhookPanel />
         </div>
       </div>
