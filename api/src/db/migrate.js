@@ -42,6 +42,33 @@ const migrations = [
     `,
     down: `DROP TABLE IF EXISTS follower_overrides, risk_rules, listener_events, listener_sessions CASCADE;`,
   },
+  {
+    id: '004_notifications',
+    up: `
+      CREATE TABLE IF NOT EXISTS notification_preferences (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        channel VARCHAR(10) DEFAULT 'email' CHECK (channel IN ('email','sms','both')),
+        copy_failures BOOLEAN DEFAULT true,
+        proxy_health BOOLEAN DEFAULT true,
+        listener_disconnects BOOLEAN DEFAULT true,
+        drawdown_alerts BOOLEAN DEFAULT true,
+        daily_pnl BOOLEAN DEFAULT false,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(255),
+        message TEXT,
+        read BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
+    `,
+    down: `DROP TABLE IF EXISTS notifications, notification_preferences CASCADE;`,
+  },
 ];
 
 export async function runMigrations(pool) {

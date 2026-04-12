@@ -2034,6 +2034,45 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
   const [showAddWebhook, setShowAddWebhook] = useState(false);
   const [newWebhook, setNewWebhook] = useState({ url: "", events: [] });
 
+  // Load Pro+ data from DB
+  useEffect(() => {
+    if (currentPlan === "proplus") {
+      apiFetch("/api/proplus/keys").then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.keys) setApiKeys(d.keys.map(k => ({ id: k.id, name: k.name, key: k.key_prefix, created: new Date(k.created_at).toLocaleDateString(), lastUsed: k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : "Never", status: k.status })));
+      }).catch(() => {});
+      apiFetch("/api/proplus/webhooks").then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.webhooks) setWebhooks(d.webhooks.map(w => ({ id: w.id, url: w.url, events: JSON.parse(w.events || "[]"), status: w.status, lastDelivery: w.last_delivery || "Never", successRate: w.total_count > 0 ? `${Math.round(w.success_count/w.total_count*100)}%` : "N/A" })));
+      }).catch(() => {});
+      apiFetch("/api/proplus/proxy-pools").then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.pools) setCustomPools(d.pools.map(p => ({ id: p.id, name: p.name, provider: p.provider, region: p.region, ips: p.ip_count || p.size, status: p.status })));
+      }).catch(() => {});
+    }
+    // Load notification preferences
+    apiFetch("/api/notifications/preferences").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.preferences) {
+        setNotifChannel(d.preferences.channel || "email");
+        setNotifCopyFails(d.preferences.copy_failures !== false);
+        setNotifProxyDown(d.preferences.proxy_health !== false);
+        setNotifListenerDrop(d.preferences.listener_disconnects !== false);
+        setNotifDrawdownHit(d.preferences.drawdown_alerts !== false);
+        setNotifDailyReport(d.preferences.daily_pnl || false);
+      }
+    }).catch(() => {});
+  }, [currentPlan]);
+
+  // Save notification preferences when they change
+  const saveNotifPrefs = useCallback(() => {
+    apiFetch("/api/notifications/preferences", {
+      method: "PUT",
+      body: JSON.stringify({
+        channel: notifChannel, copy_failures: notifCopyFails, proxy_health: notifProxyDown,
+        listener_disconnects: notifListenerDrop, drawdown_alerts: notifDrawdownHit, daily_pnl: notifDailyReport,
+      }),
+    }).catch(() => {});
+  }, [notifChannel, notifCopyFails, notifProxyDown, notifListenerDrop, notifDrawdownHit, notifDailyReport]);
+
+  useEffect(() => { saveNotifPrefs(); }, [notifChannel, notifCopyFails, notifProxyDown, notifListenerDrop, notifDrawdownHit, notifDailyReport]);
+
   const handleSave = async () => {
     try {
       const r = await apiFetch("/api/auth/me", {
@@ -2076,23 +2115,51 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
     { id: "account.connected", label: "Account Connected", desc: "New broker account added" },
   ];
 
-  const generateApiKey = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    const key = "pc_live_" + Array.from({ length: 40 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    setGeneratedKey(key);
-    setApiKeys(prev => [...prev, { id: `key-${Date.now()}`, name: newKeyName || "Untitled", key: key.slice(0, 24) + "...", created: "Today", lastUsed: "Never", status: "active" }]);
+  const generateApiKey = async () => {
+    try {
+      const r = await apiFetch("/api/proplus/keys", {
+        method: "POST",
+        body: JSON.stringify({ name: newKeyName || "Untitled", env: "live" }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || data.message);
+      setGeneratedKey(data.key);
+      setApiKeys(prev => [...prev, { id: data.prefix, name: data.name, key: data.prefix, created: "Just now", lastUsed: "Never", status: "active" }]);
+    } catch (err) {
+      alert("Failed to generate key: " + err.message);
+    }
   };
 
-  const addPool = () => {
-    setCustomPools(prev => [...prev, { id: `cp-${Date.now()}`, name: newPool.name || `Pool ${prev.length + 1}`, provider: newPool.provider, region: newPool.region, ips: newPool.size, status: "provisioning" }]);
-    setShowAddPool(false);
-    setNewPool({ name: "", provider: "brightdata", region: "us-east", size: 10 });
+  const addPool = async () => {
+    try {
+      const r = await apiFetch("/api/proplus/proxy-pools", {
+        method: "POST",
+        body: JSON.stringify(newPool),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || data.message);
+      setCustomPools(prev => [...prev, { id: data.pool.id, name: data.pool.name, provider: data.pool.provider, region: data.pool.region, ips: data.pool.size, status: data.pool.status }]);
+      setShowAddPool(false);
+      setNewPool({ name: "", provider: "brightdata", region: "us-east", size: 10 });
+    } catch (err) {
+      alert("Failed to create pool: " + err.message);
+    }
   };
 
-  const addWebhook = () => {
-    setWebhooks(prev => [...prev, { id: `wh-${Date.now()}`, url: newWebhook.url, events: newWebhook.events, status: "active", lastDelivery: "Never", successRate: "N/A" }]);
-    setShowAddWebhook(false);
-    setNewWebhook({ url: "", events: [] });
+  const addWebhook = async () => {
+    try {
+      const r = await apiFetch("/api/proplus/webhooks", {
+        method: "POST",
+        body: JSON.stringify({ url: newWebhook.url, events: newWebhook.events }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || data.message);
+      setWebhooks(prev => [...prev, { id: data.webhook.id, url: data.webhook.url, events: JSON.parse(data.webhook.events || "[]"), status: "active", lastDelivery: "Never", successRate: "N/A", secret: data.secret }]);
+      setShowAddWebhook(false);
+      setNewWebhook({ url: "", events: [] });
+    } catch (err) {
+      alert("Failed to create webhook: " + err.message);
+    }
   };
 
   const toggleWebhookEvent = (evtId) => {
@@ -2474,9 +2541,9 @@ function AuthScreen({ onAuth }) {
           )}
 
           {(mode === "forgot" || mode === "reset") && (
-            <div style={{ padding: "16px 0 8px", borderBottom: "1px solid var(--bdr)", marginBottom: 16 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--t1)", margin: 0 }}>{mode === "forgot" ? "Reset Password" : "Enter Reset Code"}</h2>
-              <p style={{ fontSize: 12, color: "var(--t3)", margin: "4px 0 0" }}>{mode === "forgot" ? "Enter your email to receive a reset code" : "Check your email for the 6-digit code"}</p>
+            <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--bdr)", marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--t1)", margin: 0, fontFamily: "var(--sans)", letterSpacing: "-0.02em" }}>{mode === "forgot" ? "Reset Password" : "Enter Reset Code"}</h2>
+              <p style={{ fontSize: 13, color: "var(--t3)", margin: "6px 0 0", fontFamily: "var(--sans)" }}>{mode === "forgot" ? "Enter your email to receive a reset code" : "Check your email for the 6-digit code"}</p>
             </div>
           )}
 
@@ -3215,8 +3282,8 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-s
 .prov-bar{height:100%;background:var(--acc);border-radius:2px;transition:width 0.8s var(--ease)}
 
 /* Modal */
-.modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;animation:fadeIn 0.3s var(--ease);overflow-y:auto;padding:20px}
-.modal-shell{background:var(--bg);border:1px solid var(--bdr);border-radius:20px;padding:6px;width:580px;max-width:95vw;max-height:calc(100vh - 40px);overflow-y:auto;margin:auto}
+.modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:flex-start;justify-content:center;animation:fadeIn 0.3s var(--ease);overflow-y:auto;padding:40px 20px}
+.modal-shell{background:var(--bg);border:1px solid var(--bdr);border-radius:20px;padding:6px;width:580px;max-width:95vw;max-height:calc(100vh - 80px);overflow-y:auto;margin:0 auto}
 .modal-inner{background:rgba(12,12,18,0.98);border-radius:16px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 40px 80px rgba(0,0,0,0.6)}
 .modal-head{display:flex;justify-content:space-between;align-items:flex-start;padding:28px 28px 0}
 .modal-title{font-size:20px;font-weight:700;letter-spacing:-0.02em}
