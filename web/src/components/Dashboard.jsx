@@ -1317,7 +1317,42 @@ function SettingsPage({ accounts }) {
   const [maxReconnects, setMaxReconnects] = useState(20);
 
   const [saved, setSaved] = useState(false);
-  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+
+  // Load risk rules from DB on mount
+  useEffect(() => {
+    apiFetch("/api/settings/risk").then(r => r.ok ? r.json() : null).then(data => {
+      if (data?.rules) {
+        if (data.rules.max_qty) setGlobalMaxQty(data.rules.max_qty);
+        if (data.rules.daily_loss_limit) setGlobalDailyLoss(Number(data.rules.daily_loss_limit));
+        if (data.rules.max_trades_per_day) setGlobalMaxTrades(data.rules.max_trades_per_day);
+        if (data.rules.trailing_drawdown) setGlobalTrailingDD(Number(data.rules.trailing_drawdown));
+        if (data.rules.kill_switch != null) setKillSwitchActive(data.rules.kill_switch);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      const r = await apiFetch("/api/settings/risk", {
+        method: "PUT",
+        body: JSON.stringify({
+          max_qty: globalMaxQty,
+          daily_loss_limit: globalDailyLoss,
+          max_trades_per_day: globalMaxTrades,
+          trailing_drawdown: globalTrailingDD,
+          kill_switch: killSwitchActive,
+        }),
+      });
+      if (r.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } else {
+        alert("Save failed");
+      }
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    }
+  };
 
   const addSymbol = () => {
     const s = symbolInput.trim().toUpperCase();
@@ -1999,7 +2034,24 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
   const [showAddWebhook, setShowAddWebhook] = useState(false);
   const [newWebhook, setNewWebhook] = useState({ url: "", events: [] });
 
-  const handleSave = () => { setEditing(false); setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const handleSave = async () => {
+    try {
+      const r = await apiFetch("/api/auth/me", {
+        method: "PATCH",
+        body: JSON.stringify({ name, phone }),
+      });
+      if (r.ok) {
+        setEditing(false);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } else {
+        const data = await r.json();
+        alert(data.error || "Save failed");
+      }
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    }
+  };
   const openBilling = (tab) => { setBillingTab(tab); setShowBilling(true); };
 
   const PLANS = { basic: "Basic", pro: "Pro", proplus: "Pro+" };
