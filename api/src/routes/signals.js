@@ -147,7 +147,7 @@ router.post('/keys', async (req, res) => {
     // Get the user's signal URL
     const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : 'https://api-production-e175.up.railway.app';
+      : 'https://api.tradevanish.com';
 
     res.status(201).json({
       signalKey,
@@ -192,7 +192,7 @@ router.get('/keys', async (req, res) => {
 
   const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
     ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-    : 'https://api-production-e175.up.railway.app';
+    : 'https://api.tradevanish.com';
 
   res.json({
     keys: result.rows.map(k => ({
