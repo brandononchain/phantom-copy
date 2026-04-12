@@ -296,3 +296,88 @@ router.post('/ninjatrader/accounts', authRequired, async (req, res) => {
 });
 
 export default router;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Account Stats (Balance, Equity, Trading Days, Win Rate)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/stats', authRequired, async (req, res) => {
+  const { accountId } = req.body;
+  if (!accountId) return res.status(400).json({ error: 'accountId required' });
+
+  const acct = await query('SELECT * FROM accounts WHERE id = $1 AND user_id = $2', [accountId, req.user.id]);
+  if (acct.rows.length === 0) return res.status(404).json({ error: 'Account not found' });
+
+  const account = acct.rows[0];
+  let creds;
+  try { creds = JSON.parse(account.credentials_encrypted || '{}'); } catch { return res.status(400).json({ error: 'Invalid credentials' }); }
+
+  if (account.platform === 'topstepx') {
+    try {
+      // Fetch account balance
+      const acctRes = await fetch('https://api.topstepx.com/api/Account/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/plain', Authorization: `Bearer ${creds.token}` },
+        body: JSON.stringify({ onlyActiveAccounts: true }),
+      });
+      const acctData = await acctRes.json();
+      const brokerAcct = (acctData.accounts || []).find(a => String(a.id) === String(account.broker_account_id));
+
+      // Fetch trade history
+      const tradeRes = await fetch('https://api.topstepx.com/api/Trade/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/plain', Authorization: `Bearer ${creds.token}` },
+        body: JSON.stringify({ accountId: parseInt(account.broker_account_id) }),
+      });
+      const tradeData = await tradeRes.json();
+      const trades = tradeData.trades || [];
+
+      const wins = trades.filter(t => t.profitAndLoss && t.profitAndLoss > 0);
+      const losses = trades.filter(t => t.profitAndLoss && t.profitAndLoss < 0);
+      const tradingDays = new Set(trades.map(t => t.creationTimestamp?.slice(0, 10)).filter(Boolean));
+      const totalPnl = trades.reduce((s, t) => s + (t.profitAndLoss || 0), 0);
+      const totalFees = trades.reduce((s, t) => s + (t.fees || 0), 0);
+
+      res.json({
+        balance: brokerAcct?.balance || null,
+        equity: brokerAcct?.balance ? brokerAcct.balance : null,
+        tradingDays: tradingDays.size,
+        totalTrades: trades.length,
+        wins: wins.length,
+        losses: losses.length,
+        winRate: (wins.length + losses.length) > 0 ? Math.round(wins.length / (wins.length + losses.length) * 1000) / 10 : null,
+        totalPnl: Math.round(totalPnl * 100) / 100,
+        totalFees: Math.round(totalFees * 100) / 100,
+        canTrade: brokerAcct?.canTrade || false,
+      });
+    } catch (err) {
+      res.status(502).json({ error: 'Failed to fetch stats', message: err.message });
+    }
+  } else if (account.platform === 'tradovate') {
+    try {
+      const baseUrl = 'https://demo.tradovateapi.com/v1';
+      const acctRes = await fetch(`${baseUrl}/account/list`, {
+        headers: { Authorization: `Bearer ${creds.token}`, Accept: 'application/json' },
+      });
+      const accounts = await acctRes.json();
+      const brokerAcct = accounts.find(a => String(a.id) === String(account.broker_account_id));
+
+      res.json({
+        balance: brokerAcct?.cashBalance || null,
+        equity: brokerAcct?.cashBalance || null,
+        tradingDays: null,
+        totalTrades: null,
+        wins: null,
+        losses: null,
+        winRate: null,
+        totalPnl: null,
+        totalFees: null,
+        canTrade: brokerAcct?.active || false,
+      });
+    } catch (err) {
+      res.status(502).json({ error: 'Failed to fetch stats', message: err.message });
+    }
+  } else {
+    res.json({ balance: null, equity: null, tradingDays: null, winRate: null });
+  }
+});

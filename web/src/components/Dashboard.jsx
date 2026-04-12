@@ -867,6 +867,41 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
 }
 
 // ─── Accounts Page ───────────────────────────────────────────────────────────
+// ─── Master Account Stats Bar ────────────────────────────────────────────────
+function MasterStatsBar({ accountId }) {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    if (!accountId) return;
+    apiFetch("/api/brokers/stats", { method: "POST", body: JSON.stringify({ accountId }) })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setStats(d); })
+      .catch(() => {});
+  }, [accountId]);
+
+  if (!stats) return null;
+
+  const statItems = [
+    { label: "BALANCE", value: stats.balance != null ? `$${Number(stats.balance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "--", color: "#00E5A0" },
+    { label: "EQUITY", value: stats.equity != null ? `$${Number(stats.equity).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "--", color: "var(--t1)" },
+    { label: "TOTAL P&L", value: stats.totalPnl != null ? `${stats.totalPnl >= 0 ? "+" : ""}$${Number(stats.totalPnl).toLocaleString(undefined, {minimumFractionDigits: 2})}` : "--", color: stats.totalPnl >= 0 ? "#00E5A0" : "var(--red)" },
+    { label: "TRADING DAYS", value: stats.tradingDays != null ? String(stats.tradingDays) : "--", color: "var(--t1)" },
+    { label: "WIN RATE", value: stats.winRate != null ? `${stats.winRate}%` : "--", color: stats.winRate >= 50 ? "#00E5A0" : stats.winRate ? "var(--red)" : "var(--t1)" },
+    { label: "W / L", value: stats.wins != null ? `${stats.wins} / ${stats.losses}` : "--", color: "var(--t1)" },
+  ];
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--bdr)", borderRadius: 10, overflow: "hidden", margin: "12px 0" }}>
+      {statItems.map(s => (
+        <div key={s.label} style={{ background: "rgba(255,255,255,0.02)", padding: "12px 14px", textAlign: "center" }}>
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", color: "var(--t3)", fontFamily: "var(--sans)", marginBottom: 6 }}>{s.label}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: s.color, fontFamily: "var(--mono)" }}>{s.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, events, positions, onStartListener, onStopListener, onDisconnect, onPause }) {
   const master = accounts.find(a => a.role === "master");
   const followers = accounts.filter(a => a.role === "follower");
@@ -910,11 +945,9 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
               <div className="acct-master-row">
                 <div className="acct-m-info"><StatusDot status={listenerState === "listening" ? "listening" : master.status} /><div><div className="acct-m-name">{master.label}</div><div className="acct-m-sub">{master.platform}</div></div></div>
                 <IPBadge ip={master.ip} provider={master.proxy} region={master.region} />
-                {master.balanceDisplay && master.balanceDisplay !== "N/A" && <div className="acct-m-stat"><span className="acct-m-stat-label">BALANCE</span><span className="c-grn" style={{fontFamily:"var(--mono)",fontWeight:700}}>{master.balanceDisplay}</span></div>}
-                <div className="acct-m-stat"><span className="acct-m-stat-label">P&L</span><span className={master.pnl >= 0 ? "c-grn" : "c-red"}>{fmt(master.pnl)}</span></div>
-                <div className="acct-m-stat"><span className="acct-m-stat-label">TRADES</span><span>{master.trades}</span></div>
                 <div className="acct-m-stat"><span className="acct-m-stat-label">LATENCY</span><LatBar ms={master.latency} /></div>
               </div>
+              <MasterStatsBar accountId={master.id} />
               <MasterListenerPanel master={master} listenerState={listenerState} listenerStage={listenerStage} events={events} positions={positions} onStartListener={onStartListener} onStopListener={onStopListener} />
             </div>
           ) : (
