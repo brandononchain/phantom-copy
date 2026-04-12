@@ -2396,14 +2396,47 @@ function Placeholder({ title, sub }) {
 
 // ─── Auth Screen ─────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
-  const [mode, setMode] = useState("login"); // login | register
+  const [mode, setMode] = useState("login"); // login | register | forgot | reset
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
 
   const handleSubmit = async () => {
+    if (mode === "forgot") {
+      if (!email) return setError("Email required");
+      setLoading(true); setError(null);
+      try {
+        const res = await apiFetch("/api/auth/reset-password", { method: "POST", body: JSON.stringify({ email }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        setSuccessMsg("Reset code sent to your email. Check your inbox.");
+        setMode("reset");
+      } catch (err) { setError(err.message); }
+      finally { setLoading(false); }
+      return;
+    }
+
+    if (mode === "reset") {
+      if (!email || !resetCode || !newPassword) return setError("All fields required");
+      setLoading(true); setError(null);
+      try {
+        const res = await apiFetch("/api/auth/reset-password/confirm", {
+          method: "POST", body: JSON.stringify({ email, code: resetCode, newPassword }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        setSuccessMsg("Password reset! You can now sign in.");
+        setMode("login"); setPassword("");
+      } catch (err) { setError(err.message); }
+      finally { setLoading(false); }
+      return;
+    }
+
     if (!email || !password) return setError("Email and password required");
     if (mode === "register" && !name) return setError("Name required");
     setLoading(true); setError(null);
@@ -2433,24 +2466,55 @@ function AuthScreen({ onAuth }) {
         </div>
 
         <div className="auth-screen-card">
-          <div className="auth-screen-tabs">
-            <button className={cn("auth-screen-tab", mode === "login" && "auth-screen-tab-on")} onClick={() => { setMode("login"); setError(null); }}>Sign In</button>
-            <button className={cn("auth-screen-tab", mode === "register" && "auth-screen-tab-on")} onClick={() => { setMode("register"); setError(null); }}>Create Account</button>
-          </div>
+          {(mode === "login" || mode === "register") && (
+            <div className="auth-screen-tabs">
+              <button className={cn("auth-screen-tab", mode === "login" && "auth-screen-tab-on")} onClick={() => { setMode("login"); setError(null); setSuccessMsg(null); }}>Sign In</button>
+              <button className={cn("auth-screen-tab", mode === "register" && "auth-screen-tab-on")} onClick={() => { setMode("register"); setError(null); setSuccessMsg(null); }}>Create Account</button>
+            </div>
+          )}
+
+          {(mode === "forgot" || mode === "reset") && (
+            <div style={{ padding: "16px 0 8px", borderBottom: "1px solid var(--bdr)", marginBottom: 16 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--t1)", margin: 0 }}>{mode === "forgot" ? "Reset Password" : "Enter Reset Code"}</h2>
+              <p style={{ fontSize: 12, color: "var(--t3)", margin: "4px 0 0" }}>{mode === "forgot" ? "Enter your email to receive a reset code" : "Check your email for the 6-digit code"}</p>
+            </div>
+          )}
 
           <div className="auth-screen-form">
             {mode === "register" && (
               <div className="set-field"><label className="set-label">FULL NAME</label><input type="text" className="set-input" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} /></div>
             )}
-            <div className="set-field"><label className="set-label">EMAIL</label><input type="email" className="set-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
-            <div className="set-field"><label className="set-label">PASSWORD</label><input type="password" className="set-input" placeholder={mode === "register" ? "Create a password" : "Your password"} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
 
+            {(mode === "login" || mode === "register" || mode === "forgot" || mode === "reset") && (
+              <div className="set-field"><label className="set-label">EMAIL</label><input type="email" className="set-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
+            )}
+
+            {(mode === "login" || mode === "register") && (
+              <div className="set-field"><label className="set-label">PASSWORD</label><input type="password" className="set-input" placeholder={mode === "register" ? "Create a password" : "Your password"} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
+            )}
+
+            {mode === "reset" && (
+              <>
+                <div className="set-field"><label className="set-label">RESET CODE</label><input type="text" className="set-input" placeholder="6-digit code from your email" value={resetCode} onChange={e => setResetCode(e.target.value)} style={{ fontFamily: "var(--mono)", fontSize: 16, letterSpacing: "3px", textAlign: "center" }} maxLength={6} /></div>
+                <div className="set-field"><label className="set-label">NEW PASSWORD</label><input type="password" className="set-input" placeholder="Create a new password" value={newPassword} onChange={e => setNewPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
+              </>
+            )}
+
+            {successMsg && <div style={{ background: "rgba(0,229,160,0.08)", border: "1px solid rgba(0,229,160,0.2)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#00E5A0", marginBottom: 8 }}>{successMsg}</div>}
             {error && <div className="auth-screen-error">{error}</div>}
 
             <button className="btn-primary btn-full" onClick={handleSubmit} disabled={loading} style={{ marginTop: 20 }}>
-              <span>{loading ? "Processing..." : mode === "login" ? "Sign In" : "Create Account"}</span>
+              <span>{loading ? "Processing..." : mode === "login" ? "Sign In" : mode === "register" ? "Create Account" : mode === "forgot" ? "Send Reset Code" : "Reset Password"}</span>
               <span className="btn-aw"><span className="btn-ar">{loading ? "..." : "\u2192"}</span></span>
             </button>
+
+            {mode === "login" && (
+              <button onClick={() => { setMode("forgot"); setError(null); setSuccessMsg(null); }} style={{ background: "none", border: "none", color: "var(--t3)", fontSize: 12, cursor: "pointer", marginTop: 12, textAlign: "center", width: "100%" }}>Forgot your password?</button>
+            )}
+
+            {(mode === "forgot" || mode === "reset") && (
+              <button onClick={() => { setMode("login"); setError(null); setSuccessMsg(null); }} style={{ background: "none", border: "none", color: "var(--t3)", fontSize: 12, cursor: "pointer", marginTop: 12, textAlign: "center", width: "100%" }}>Back to Sign In</button>
+            )}
           </div>
         </div>
 
