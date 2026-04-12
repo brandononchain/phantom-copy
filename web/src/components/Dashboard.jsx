@@ -2105,16 +2105,14 @@ function SignalWebhookPanel() {
 
       {/* Create new key */}
       {showCreate ? (
-        <div className="card-sh" style={{ margin: 0, border: "1px solid var(--bdr)" }}>
-          <div className="card-in" style={{ padding: 16 }}>
-            <div className="set-field" style={{ marginBottom: 12 }}>
-              <label className="set-label">STRATEGY NAME</label>
-              <input className="set-input" placeholder="e.g. NQ Scalper, ES Breakout" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createSignalKey()} autoFocus />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="fc-btn" style={{ flex: 1, padding: "10px", fontSize: 12, fontWeight: 600, background: "rgba(0,229,160,0.08)", borderColor: "rgba(0,229,160,0.2)", color: "#00E5A0" }} onClick={createSignalKey}>Generate Webhook URL</button>
-              <button className="fc-btn" style={{ padding: "10px 16px", fontSize: 12 }} onClick={() => setShowCreate(false)}>Cancel</button>
-            </div>
+        <div style={{ padding: "4px 0" }}>
+          <div className="set-field" style={{ marginBottom: 14 }}>
+            <label className="set-label">STRATEGY NAME</label>
+            <input className="set-input" placeholder="e.g. NQ Scalper, ES Breakout" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createSignalKey()} autoFocus />
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn-primary" onClick={createSignalKey}><span>Generate Webhook URL</span><span className="btn-aw"><span className="btn-ar">&#10003;</span></span></button>
+            <button className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
           </div>
         </div>
       ) : (
