@@ -11,7 +11,7 @@ const APIS = {
     demo: 'https://demo.tradovateapi.com/v1',
     live: 'https://live.tradovateapi.com/v1',
   },
-  projectx: 'https://api.thefuturesdesk.projectx.com',
+  projectx: 'https://api.topstepx.com',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
