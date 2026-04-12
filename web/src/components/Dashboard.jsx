@@ -72,7 +72,7 @@ function IPBadge({ ip, provider, region }) {
   return (
     <span className="ip-b" onClick={() => setShow(!show)} title={`${provider} | ${region}`}>
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M2 12h20M12 2c2.5 3 4 6.5 4 10s-1.5 7-4 10c-2.5-3-4-6.5-4-10s1.5-7 4-10z"/></svg>
-      <span>{show ? ip : ip.replace(/\d+\.\d+$/, "**.** ")}</span>
+      <span>{!ip ? "No IP" : show ? ip : ip.replace(/\d+\.\d+$/, "**.** ")}</span>
       <span className="ip-r">{region}</span>
     </span>
   );

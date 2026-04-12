@@ -112,23 +112,10 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
 // Step 2: OAuth callback - Tradovate redirects here with ?code=XXX
 router.get('/tradovate/callback', async (req, res) => {
   const { code, error } = req.query;
-
-  const sendResult = (params) => {
-    // Send result back to the opener window via postMessage, then close popup
-    res.setHeader('Content-Type', 'text/html');
-    res.send(`<!DOCTYPE html><html><body><script>
-      if (window.opener) {
-        window.opener.postMessage(${JSON.stringify(params)}, "*");
-        window.close();
-      } else {
-        // Fallback: redirect to frontend with params
-        window.location.href = "${(appConfig.cors.origin || 'https://web-production-0433b.up.railway.app')}" + "?" + new URLSearchParams(${JSON.stringify(params)}).toString();
-      }
-    </script><p>Connecting... you can close this window.</p></body></html>`);
-  };
+  const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
 
   if (error || !code) {
-    return sendResult({ tradovate_error: error || 'no_code' });
+    return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(error || 'no_code')}`);
   }
 
   try {
@@ -152,17 +139,12 @@ router.get('/tradovate/callback', async (req, res) => {
     }
 
     if (!tokenData.access_token) {
-      return sendResult({ tradovate_error: tokenData.error_description || tokenData.error || 'token_exchange_failed' });
+      return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(tokenData.error_description || tokenData.error || 'token_exchange_failed')}`);
     }
 
-    const env = tokenData.access_token ? 'demo' : 'live';
-    return sendResult({
-      tradovate_token: tokenData.access_token,
-      tradovate_expires: String(tokenData.expires_in || 5400),
-      tradovate_env: env,
-    });
+    return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(tokenData.access_token)}&tradovate_expires=${tokenData.expires_in || 5400}&tradovate_env=demo`);
   } catch (err) {
-    return sendResult({ tradovate_error: err.message });
+    return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(err.message)}`);
   }
 });
 
