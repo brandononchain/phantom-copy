@@ -36,16 +36,14 @@ const INITIAL_TRADES = [];
 const cn = (...c) => c.filter(Boolean).join(" ");
 const fmt = (n) => (n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}`);
 
-// ─── API Helper (token-based auth) ──────────────────────────────────────────
-const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
+// ─── API Helper (same-origin via Next.js proxy, cookies work natively) ───────
 
 function apiFetch(path, options = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("pc_token") : null;
-  return fetch(`${API_BASE}${path}`, {
+  return fetch(path, {
+    credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
@@ -2255,8 +2253,8 @@ function AuthScreen({ onAuth }) {
     try {
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const body = mode === "login" ? { email, password } : { email, password, name };
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      const res = await apiFetch(endpoint, {
+        method: "POST", body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Authentication failed");
@@ -2317,37 +2315,30 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentPlan, setCurrentPlan] = useState("basic");
 
-  // Check for existing session on mount
+  // Check for existing session on mount (cookie sent automatically)
   useEffect(() => {
-    const savedToken = typeof window !== "undefined" ? localStorage.getItem("pc_token") : null;
-    if (!savedToken) { setAuthChecked(true); return; }
-
     apiFetch("/api/auth/me")
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.user) {
           setUser(data.user);
-          setAuthToken(savedToken);
+          setAuthToken("session");
           setCurrentPlan(data.user.plan || "basic");
-        } else {
-          localStorage.removeItem("pc_token");
         }
         setAuthChecked(true);
       })
-      .catch(() => { localStorage.removeItem("pc_token"); setAuthChecked(true); });
+      .catch(() => setAuthChecked(true));
   }, []);
 
   const handleAuth = (userData, token) => {
     setUser(userData);
     setAuthToken(token);
     setCurrentPlan(userData.plan || "basic");
-    if (typeof window !== "undefined") localStorage.setItem("pc_token", token);
     setShowOnboarding(true);
   };
 
   const handleSignOut = () => {
     apiFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-    if (typeof window !== "undefined") localStorage.removeItem("pc_token");
     setUser(null); setAuthToken(null); setPage("overview"); setAccounts([]); stopListener();
   };
 
