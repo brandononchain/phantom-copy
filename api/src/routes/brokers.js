@@ -113,34 +113,29 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
 router.get('/tradovate/callback', async (req, res) => {
   const { code, error } = req.query;
 
+  const sendResult = (params) => {
+    // Send result back to the opener window via postMessage, then close popup
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`<!DOCTYPE html><html><body><script>
+      if (window.opener) {
+        window.opener.postMessage(${JSON.stringify(params)}, "*");
+        window.close();
+      } else {
+        // Fallback: redirect to frontend with params
+        window.location.href = "${(appConfig.cors.origin || 'https://web-production-0433b.up.railway.app')}" + "?" + new URLSearchParams(${JSON.stringify(params)}).toString();
+      }
+    </script><p>Connecting... you can close this window.</p></body></html>`);
+  };
+
   if (error || !code) {
-    // Redirect to frontend with error
-    const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
-    return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(error || 'no_code')}`);
+    return sendResult({ tradovate_error: error || 'no_code' });
   }
 
   try {
-    // Exchange the code for an access token
-    // Try demo first, fall back to live
-    const exchangeUrl = appConfig.tradovate.demoExchangeUrl;
-
-    const tokenRes = await fetch(exchangeUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: appConfig.tradovate.redirectUri,
-        client_id: appConfig.tradovate.clientId,
-        client_secret: appConfig.tradovate.clientSecret,
-      }),
-    });
-
-    const tokenData = await tokenRes.json();
-
-    if (tokenData.error || !tokenData.access_token) {
-      // If demo fails, try live exchange
-      const liveRes = await fetch(appConfig.tradovate.liveExchangeUrl, {
+    // Exchange code for token - try demo first, then live
+    let tokenData;
+    for (const exchangeUrl of [appConfig.tradovate.demoExchangeUrl, appConfig.tradovate.liveExchangeUrl]) {
+      const tokenRes = await fetch(exchangeUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -152,25 +147,22 @@ router.get('/tradovate/callback', async (req, res) => {
         }),
       });
 
-      const liveData = await liveRes.json();
-
-      if (liveData.error || !liveData.access_token) {
-        const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
-        return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(liveData.error_description || liveData.error || 'token_exchange_failed')}`);
-      }
-
-      // Success with live
-      const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
-      return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(liveData.access_token)}&tradovate_expires=${liveData.expires_in || 5400}&tradovate_env=live`);
+      tokenData = await tokenRes.json();
+      if (tokenData.access_token) break;
     }
 
-    // Success with demo
-    const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
-    return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(tokenData.access_token)}&tradovate_expires=${tokenData.expires_in || 5400}&tradovate_env=demo`);
+    if (!tokenData.access_token) {
+      return sendResult({ tradovate_error: tokenData.error_description || tokenData.error || 'token_exchange_failed' });
+    }
 
+    const env = tokenData.access_token ? 'demo' : 'live';
+    return sendResult({
+      tradovate_token: tokenData.access_token,
+      tradovate_expires: String(tokenData.expires_in || 5400),
+      tradovate_env: env,
+    });
   } catch (err) {
-    const frontendUrl = appConfig.cors.origin || 'https://web-production-0433b.up.railway.app';
-    return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(err.message)}`);
+    return sendResult({ tradovate_error: err.message });
   }
 });
 
