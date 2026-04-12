@@ -26,66 +26,11 @@ const LISTENER_STAGES = [
   { key: "listening", label: "Listening for trades", desc: "Master listener active and watching" },
 ];
 
-const MOCK_ACCOUNTS = [
-  { id: "acc_02", label: "Apex #2", platform: "Tradovate", role: "follower", ip: "203.45.xx.91", proxy: "BrightData", region: "US-West", status: "idle", pnl: 0, trades: 0, latency: 18 },
-  { id: "acc_03", label: "Topstep #1", platform: "Rithmic", role: "follower", ip: "91.134.xx.17", proxy: "Oxylabs", region: "EU-West", status: "idle", pnl: 0, trades: 0, latency: 44 },
-  { id: "acc_04", label: "TakeProfitTrader", platform: "Tradovate", role: "follower", ip: "45.89.xx.62", proxy: "SmartProxy", region: "US-Central", status: "idle", pnl: 0, trades: 0, latency: 9 },
-];
-
-const MOCK_EVENTS = [
-  { id: 1, time: "14:32:07.234", type: "fill", msg: "LONG 2 NQ @ 21547.25", icon: "fill" },
-  { id: 2, time: "14:32:07.241", type: "copy", msg: "Copied to 4 followers (avg 7ms)", icon: "copy" },
-  { id: 3, time: "14:32:07.312", type: "bracket", msg: "SL 21535.00 / TP 21575.00 set on all", icon: "bracket" },
-  { id: 4, time: "14:28:15.891", type: "fill", msg: "SHORT 3 ES @ 5892.50", icon: "fill" },
-  { id: 5, time: "14:28:15.903", type: "copy", msg: "Copied to 4 followers (avg 12ms)", icon: "copy" },
-  { id: 6, time: "14:28:22.104", type: "close", msg: "Closed ES SHORT @ 5888.75 (+$562.50)", icon: "close" },
-  { id: 7, time: "14:15:43.551", type: "fill", msg: "LONG 1 NQ @ 21502.00", icon: "fill" },
-  { id: 8, time: "14:15:43.558", type: "copy", msg: "Copied to 3 followers (avg 9ms)", icon: "copy" },
-  { id: 9, time: "14:02:11.003", type: "modify", msg: "SL moved 21488 \u2192 21500 on all accounts", icon: "modify" },
-  { id: 10, time: "13:58:22.710", type: "heartbeat", msg: "WebSocket heartbeat OK (12ms)", icon: "heartbeat" },
-];
-
-const MOCK_POSITIONS = [
-  { symbol: "NQ", side: "LONG", qty: 2, entry: 21547.25, current: 21563.50, unrealPnl: 650.0, stopLoss: 21535.00, takeProfit: 21575.00 },
-];
-
-const MOCK_TRADES = [
-  { id: 1, time: "14:32:07", ts: "14:32:07.234", symbol: "NQ", side: "LONG", qty: 2, entry: 21547.25, exit: null, status: "open", pnl: 0, copiedTo: 4, mOid: "ORD-8841", action: "OPEN", bracket: { sl: 21535.00, tp: 21575.00 }, followers: [
-    { name: "Apex #2", ip: "203.45.xx.91", rg: "US-W", fp: 21547.50, lat: 7, slip: 1, oid: "F-2291", st: "filled", ft: "14:32:07.241" },
-    { name: "Topstep #1", ip: "91.134.xx.17", rg: "EU-W", fp: 21547.75, lat: 18, slip: 2, oid: "F-2292", st: "filled", ft: "14:32:07.252" },
-    { name: "TakeProfitTrader", ip: "45.89.xx.62", rg: "US-C", fp: 21547.25, lat: 5, slip: 0, oid: "F-2293", st: "filled", ft: "14:32:07.239" },
-    { name: "Elite Funded", ip: "62.171.xx.34", rg: "EU-C", fp: 21547.50, lat: 14, slip: 1, oid: "F-2294", st: "filled", ft: "14:32:07.248" },
-  ]},
-  { id: 2, time: "14:28:15", ts: "14:28:15.891", symbol: "ES", side: "SHORT", qty: 3, entry: 5892.50, exit: 5888.75, status: "closed", pnl: 562.5, copiedTo: 4, mOid: "ORD-8839", action: "CLOSE", bracket: null, followers: [
-    { name: "Apex #2", ip: "203.45.xx.91", rg: "US-W", fp: 5892.75, lat: 9, slip: 1, oid: "F-2285", st: "filled", ft: "14:28:15.900", xp: 5888.50, xl: 11, xs: 1, fpnl: 531.25 },
-    { name: "Topstep #1", ip: "91.134.xx.17", rg: "EU-W", fp: 5892.50, lat: 22, slip: 0, oid: "F-2286", st: "filled", ft: "14:28:15.913", xp: 5888.75, xl: 19, xs: 0, fpnl: 562.50 },
-    { name: "TakeProfitTrader", ip: "45.89.xx.62", rg: "US-C", fp: 5892.50, lat: 6, slip: 0, oid: "F-2287", st: "filled", ft: "14:28:15.897", xp: 5888.75, xl: 7, xs: 0, fpnl: 562.50 },
-    { name: "Elite Funded", ip: "62.171.xx.34", rg: "EU-C", fp: 5893.00, lat: 31, slip: 2, oid: "F-2288", st: "filled", ft: "14:28:15.922", xp: 5889.00, xl: 28, xs: 1, fpnl: 500.00 },
-  ]},
-  { id: 3, time: "14:15:43", ts: "14:15:43.551", symbol: "NQ", side: "LONG", qty: 1, entry: 21502.00, exit: 21534.50, status: "closed", pnl: 650.0, copiedTo: 3, mOid: "ORD-8835", action: "CLOSE", bracket: null, followers: [
-    { name: "Apex #2", ip: "203.45.xx.91", rg: "US-W", fp: 21502.25, lat: 8, slip: 1, oid: "F-2279", st: "filled", ft: "14:15:43.559", xp: 21534.25, xl: 10, xs: 1, fpnl: 640.00 },
-    { name: "TakeProfitTrader", ip: "45.89.xx.62", rg: "US-C", fp: 21502.00, lat: 4, slip: 0, oid: "F-2280", st: "filled", ft: "14:15:43.555", xp: 21534.50, xl: 6, xs: 0, fpnl: 650.00 },
-    { name: "Elite Funded", ip: "62.171.xx.34", rg: "EU-C", fp: 21502.50, lat: 16, slip: 2, oid: "F-2281", st: "filled", ft: "14:15:43.567", xp: 21534.00, xl: 20, xs: 2, fpnl: 630.00 },
-  ]},
-  { id: 4, time: "13:58:22", ts: "13:58:22.710", symbol: "ES", side: "LONG", qty: 2, entry: 5878.25, exit: 5885.00, status: "closed", pnl: 337.5, copiedTo: 4, mOid: "ORD-8831", action: "CLOSE", bracket: null, followers: [
-    { name: "Apex #2", ip: "203.45.xx.91", rg: "US-W", fp: 5878.50, lat: 8, slip: 1, oid: "F-2271", st: "filled", ft: "13:58:22.718", xp: 5885.00, xl: 9, xs: 0, fpnl: 325.00 },
-    { name: "Topstep #1", ip: "91.134.xx.17", rg: "EU-W", fp: 5878.25, lat: 20, slip: 0, oid: "F-2272", st: "filled", ft: "13:58:22.730", xp: 5885.00, xl: 22, xs: 0, fpnl: 337.50 },
-    { name: "TakeProfitTrader", ip: "45.89.xx.62", rg: "US-C", fp: 5878.25, lat: 5, slip: 0, oid: "F-2273", st: "filled", ft: "13:58:22.715", xp: 5884.75, xl: 7, xs: 1, fpnl: 325.00 },
-    { name: "Elite Funded", ip: "62.171.xx.34", rg: "EU-C", fp: 5878.50, lat: 29, slip: 1, oid: "F-2274", st: "filled", ft: "13:58:22.739", xp: 5884.75, xl: 31, xs: 1, fpnl: 312.50 },
-  ]},
-  { id: 5, time: "13:42:11", ts: "13:42:11.003", symbol: "NQ", side: "SHORT", qty: 1, entry: 21488.75, exit: 21475.25, status: "closed", pnl: 270.0, copiedTo: 4, mOid: "ORD-8827", action: "CLOSE", bracket: null, followers: [
-    { name: "Apex #2", ip: "203.45.xx.91", rg: "US-W", fp: 21488.50, lat: 7, slip: 1, oid: "F-2261", st: "filled", ft: "13:42:11.010", xp: 21475.50, xl: 8, xs: 1, fpnl: 260.00 },
-    { name: "Topstep #1", ip: "91.134.xx.17", rg: "EU-W", fp: 21488.75, lat: 19, slip: 0, oid: "F-2262", st: "filled", ft: "13:42:11.022", xp: 21475.25, xl: 21, xs: 0, fpnl: 270.00 },
-    { name: "TakeProfitTrader", ip: "45.89.xx.62", rg: "US-C", fp: 21488.75, lat: 4, slip: 0, oid: "F-2263", st: "filled", ft: "13:42:11.007", xp: 21475.25, xl: 5, xs: 0, fpnl: 270.00 },
-    { name: "Elite Funded", ip: "62.171.xx.34", rg: "EU-C", fp: 21489.00, lat: 27, slip: 1, oid: "F-2264", st: "filled", ft: "13:42:11.030", xp: 21475.75, xl: 30, xs: 2, fpnl: 265.00 },
-  ]},
-  { id: 6, time: "13:21:04", ts: "13:21:04.445", symbol: "ES", side: "LONG", qty: 1, entry: 5871.00, exit: 5874.50, status: "closed", pnl: 175.0, copiedTo: 4, mOid: "ORD-8822", action: "CLOSE", bracket: null, followers: [
-    { name: "Apex #2", ip: "203.45.xx.91", rg: "US-W", fp: 5871.00, lat: 6, slip: 0, oid: "F-2251", st: "filled", ft: "13:21:04.451", xp: 5874.50, xl: 8, xs: 0, fpnl: 175.00 },
-    { name: "Topstep #1", ip: "91.134.xx.17", rg: "EU-W", fp: 5871.25, lat: 21, slip: 1, oid: "F-2252", st: "filled", ft: "13:21:04.466", xp: 5874.25, xl: 23, xs: 1, fpnl: 150.00 },
-    { name: "TakeProfitTrader", ip: "45.89.xx.62", rg: "US-C", fp: 5871.00, lat: 5, slip: 0, oid: "F-2253", st: "filled", ft: "13:21:04.450", xp: 5874.50, xl: 6, xs: 0, fpnl: 175.00 },
-    { name: "Elite Funded", ip: "62.171.xx.34", rg: "EU-C", fp: 5871.25, lat: 28, slip: 1, oid: "F-2254", st: "filled", ft: "13:21:04.473", xp: 5874.25, xl: 29, xs: 1, fpnl: 150.00 },
-  ]},
-];
+// No mock data - all data comes from API
+const INITIAL_ACCOUNTS = [];
+const INITIAL_EVENTS = [];
+const INITIAL_POSITIONS = [];
+const INITIAL_TRADES = [];
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
 const cn = (...c) => c.filter(Boolean).join(" ");
@@ -872,7 +817,7 @@ function OverviewPage({ accounts, onOpenConnect, listenerState, expandedTrade, s
         <div className="tbl-w"><table className="tbl">
           <thead><tr><th></th><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>Copied To</th><th>P&L</th></tr></thead>
           <tbody>
-            {MOCK_TRADES.map((t, i) => [
+            {INITIAL_TRADES.map((t, i) => [
                 <tr key={`row-${t.id}`} className="tbl-r tbl-r-click" style={{ animationDelay: `${i * 50}ms` }} onClick={() => setExpandedTrade(expandedTrade === t.id ? null : t.id)}>
                   <td style={{ width: 30 }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: expandedTrade === t.id ? "rotate(90deg)" : "none", transition: "transform 0.2s", opacity: t.followers?.length ? 1 : 0.2 }}><path d="M9 18l6-6-6-6"/></svg>
@@ -919,8 +864,8 @@ function TradeLogPage({ accounts }) {
   const [filterSide, setFilterSide] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
 
-  const symbols = [...new Set(MOCK_TRADES.map(t => t.symbol))];
-  const filtered = MOCK_TRADES.filter(t => {
+  const symbols = [...new Set(INITIAL_TRADES.map(t => t.symbol))];
+  const filtered = INITIAL_TRADES.filter(t => {
     if (filterSymbol !== "ALL" && t.symbol !== filterSymbol) return false;
     if (filterSide !== "ALL" && t.side !== filterSide) return false;
     if (filterStatus !== "ALL" && t.status !== filterStatus) return false;
@@ -1519,16 +1464,16 @@ function SettingsPage({ accounts }) {
 }
 
 // ─── Billing Modal ───────────────────────────────────────────────────────────
-function BillingModal({ onClose, currentPlan, onPlanChange }) {
-  const [tab, setTab] = useState("plan"); // plan | payment | invoices
+function BillingModal({ onClose, currentPlan, onPlanChange, initialTab }) {
+  const [tab, setTab] = useState(initialTab || "plan");
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [changingPlan, setChangingPlan] = useState(false);
   const [changePhase, setChangePhase] = useState(null); // null | processing | success
   // Payment
-  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
-  const [cardExpiry, setCardExpiry] = useState("12/27");
-  const [cardCvc, setCardCvc] = useState("123");
-  const [cardName, setCardName] = useState("Brandon");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvc, setCardCvc] = useState("");
+  const [cardName, setCardName] = useState("");
   const [updatingCard, setUpdatingCard] = useState(false);
   const [cardSaved, setCardSaved] = useState(false);
 
@@ -1564,12 +1509,7 @@ function BillingModal({ onClose, currentPlan, onPlanChange }) {
 
   const isUpgrade = selectedPlan && selectedPlan.price > current.price;
 
-  const INVOICES = [
-    { id: "INV-0047", date: "Apr 1, 2026", amount: "$69.00", plan: "Pro", status: "paid" },
-    { id: "INV-0042", date: "Mar 1, 2026", amount: "$69.00", plan: "Pro", status: "paid" },
-    { id: "INV-0038", date: "Feb 1, 2026", amount: "$39.99", plan: "Basic", status: "paid" },
-    { id: "INV-0031", date: "Jan 1, 2026", amount: "$39.99", plan: "Basic", status: "paid" },
-  ];
+  const INVOICES = []; // Loaded from Stripe via /api/billing/info
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -1854,10 +1794,10 @@ function OnboardingOverlay({ onComplete }) {
 }
 
 // ─── Profile Page ────────────────────────────────────────────────────────────
-function ProfilePage({ onSignOut, currentPlan, onPlanChange }) {
-  const [name, setName] = useState("Brandon");
-  const [email, setEmail] = useState("brandon@lobstack.ai");
-  const [phone, setPhone] = useState("+1 (312) 555-0147");
+function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
+  const [name, setName] = useState(user?.name || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [phone, setPhone] = useState(user?.phone || "");
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
@@ -1873,28 +1813,19 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange }) {
   const [showSignOut, setShowSignOut] = useState(false);
 
   // Pro+ Custom Proxy Pools
-  const [customPools, setCustomPools] = useState([
-    { id: "cp-1", name: "US East Pool", provider: "BrightData", region: "us-east", ips: 12, status: "active" },
-    { id: "cp-2", name: "EU West Pool", provider: "Oxylabs", region: "eu-west", ips: 8, status: "active" },
-  ]);
+  const [customPools, setCustomPools] = useState([]);
   const [showAddPool, setShowAddPool] = useState(false);
   const [newPool, setNewPool] = useState({ name: "", provider: "brightdata", region: "us-east", size: 10 });
 
   // Pro+ API Keys
-  const [apiKeys, setApiKeys] = useState([
-    { id: "key-1", name: "Production", key: "pc_live_7x9kM2pQr4sT...vWnY", created: "Mar 15, 2026", lastUsed: "Today", status: "active" },
-    { id: "key-2", name: "Staging", key: "pc_test_3aB8cD1eF5gH...jKlM", created: "Feb 1, 2026", lastUsed: "Apr 8", status: "active" },
-  ]);
+  const [apiKeys, setApiKeys] = useState([]);
   const [showNewKey, setShowNewKey] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [generatedKey, setGeneratedKey] = useState(null);
   const [copiedKey, setCopiedKey] = useState(false);
 
   // Pro+ Webhooks
-  const [webhooks, setWebhooks] = useState([
-    { id: "wh-1", url: "https://api.lobstack.ai/phantom/trades", events: ["trade.executed", "trade.failed"], status: "active", lastDelivery: "2 min ago", successRate: "99.8%" },
-    { id: "wh-2", url: "https://hooks.slack.com/T05N/B06M/xyz", events: ["listener.disconnected", "risk.drawdown"], status: "active", lastDelivery: "1 hr ago", successRate: "100%" },
-  ]);
+  const [webhooks, setWebhooks] = useState([]);
   const [showAddWebhook, setShowAddWebhook] = useState(false);
   const [newWebhook, setNewWebhook] = useState({ url: "", events: [] });
 
@@ -1962,7 +1893,7 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange }) {
             <p className="prof-header-email">{email}</p>
             <div className="prof-header-badges">
               <span className="prof-plan-badge">{PLANS[currentPlan]} PLAN</span>
-              <span className="prof-member-badge">Member since Jan 2026</span>
+              <span className="prof-member-badge">{user?.created_at ? `Since ${new Date(user.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : "Member"}</span>
             </div>
           </div>
           {!editing && <button className="btn-ghost" onClick={() => setEditing(true)}>Edit Profile</button>}
@@ -2010,9 +1941,7 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange }) {
           </div>
 
           <div className="prof-billing-row">
-            <div className="prof-billing-info"><span className="prof-billing-label">NEXT BILLING DATE</span><span className="prof-billing-val">May 11, 2026</span></div>
-            <div className="prof-billing-info"><span className="prof-billing-label">PAYMENT METHOD</span><span className="prof-billing-val">Visa ending 4242</span></div>
-            <div className="prof-billing-info"><span className="prof-billing-label">STATUS</span><span className="prof-billing-val c-grn">Active</span></div>
+            <div className="prof-billing-info"><span className="prof-billing-label">PLAN STATUS</span><span className="prof-billing-val c-grn">Active</span></div>
             <div className="prof-billing-btns">
               <button className="prof-manage-billing" onClick={() => openBilling("payment")}>Update Card</button>
               <button className="prof-manage-billing" onClick={() => openBilling("invoices")}>View Invoices</button>
@@ -2234,7 +2163,7 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange }) {
         )}
       </div>
 
-      {showBilling && <BillingModal onClose={() => setShowBilling(false)} currentPlan={currentPlan} onPlanChange={onPlanChange} />}
+      {showBilling && <BillingModal key={billingTab} onClose={() => setShowBilling(false)} currentPlan={currentPlan} onPlanChange={onPlanChange} initialTab={billingTab} />}
     </div>
   );
 }
@@ -2243,14 +2172,114 @@ function Placeholder({ title, sub }) {
   return (<div className="page fade-in"><div className="pg-head"><div><h1 className="pg-title">{title}</h1><p className="pg-sub">{sub}</p></div></div><div className="card-sh"><div className="card-in" style={{ padding: "80px 40px", textAlign: "center" }}><div style={{ fontSize: 13, color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Module under construction</div></div></div></div>);
 }
 
+// ─── Auth Screen ─────────────────────────────────────────────────────────────
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState("login"); // login | register
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const API = typeof window !== "undefined" ? (window.__NEXT_DATA__?.runtimeConfig?.NEXT_PUBLIC_API_URL || "") : "";
+
+  const handleSubmit = async () => {
+    if (!email || !password) return setError("Email and password required");
+    if (mode === "register" && !name) return setError("Name required");
+    setLoading(true); setError(null);
+
+    try {
+      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+      const body = mode === "login" ? { email, password } : { email, password, name };
+      const res = await fetch(`${API}${endpoint}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Authentication failed");
+      onAuth(data.user, data.token);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-screen-inner fade-in">
+        <div className="auth-screen-brand">
+          <h1 className="auth-screen-title">Phantom Copy</h1>
+          <p className="auth-screen-sub">The Stealth Standard for Modern Prop Trading</p>
+        </div>
+
+        <div className="auth-screen-card">
+          <div className="auth-screen-tabs">
+            <button className={cn("auth-screen-tab", mode === "login" && "auth-screen-tab-on")} onClick={() => { setMode("login"); setError(null); }}>Sign In</button>
+            <button className={cn("auth-screen-tab", mode === "register" && "auth-screen-tab-on")} onClick={() => { setMode("register"); setError(null); }}>Create Account</button>
+          </div>
+
+          <div className="auth-screen-form">
+            {mode === "register" && (
+              <div className="set-field"><label className="set-label">FULL NAME</label><input type="text" className="set-input" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} /></div>
+            )}
+            <div className="set-field"><label className="set-label">EMAIL</label><input type="email" className="set-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
+            <div className="set-field"><label className="set-label">PASSWORD</label><input type="password" className="set-input" placeholder={mode === "register" ? "Create a password" : "Your password"} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
+
+            {error && <div className="auth-screen-error">{error}</div>}
+
+            <button className="btn-primary btn-full" onClick={handleSubmit} disabled={loading} style={{ marginTop: 20 }}>
+              <span>{loading ? "Processing..." : mode === "login" ? "Sign In" : "Create Account"}</span>
+              <span className="btn-aw"><span className="btn-ar">{loading ? "..." : "\u2192"}</span></span>
+            </button>
+          </div>
+        </div>
+
+        <p className="auth-screen-footer">Copy trades across unlimited accounts with IP isolation per connection.</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── App Root ────────────────────────────────────────────────────────────────
 export default function App() {
-  const [page, setPage] = useState("profile");
-  const [accounts, setAccounts] = useState(MOCK_ACCOUNTS);
+  const [user, setUser] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  const [page, setPage] = useState("overview");
+  const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
   const [showConnect, setShowConnect] = useState(false);
   const [expandedTrade, setExpandedTrade] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [currentPlan, setCurrentPlan] = useState("proplus"); // basic | pro | proplus
+  const [currentPlan, setCurrentPlan] = useState("basic");
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const API = typeof window !== "undefined" ? (window.__NEXT_DATA__?.runtimeConfig?.NEXT_PUBLIC_API_URL || "") : "";
+    fetch(`${API}/api/auth/me`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.user) {
+          setUser(data.user);
+          setCurrentPlan(data.user.plan || "basic");
+        }
+        setAuthChecked(true);
+      })
+      .catch(() => setAuthChecked(true));
+  }, []);
+
+  const handleAuth = (userData, token) => {
+    setUser(userData);
+    setAuthToken(token);
+    setCurrentPlan(userData.plan || "basic");
+    setShowOnboarding(true);
+  };
+
+  const handleSignOut = () => {
+    const API = typeof window !== "undefined" ? (window.__NEXT_DATA__?.runtimeConfig?.NEXT_PUBLIC_API_URL || "") : "";
+    fetch(`${API}/api/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
+    setUser(null); setAuthToken(null); setPage("overview"); setAccounts([]); stopListener();
+  };
 
   // Master listener state machine
   const [listenerState, setListenerState] = useState("idle"); // idle | connecting | listening
@@ -2276,8 +2305,8 @@ export default function App() {
         clearInterval(timerRef.current);
         setListenerState("listening");
         setListenerStage("listening");
-        setEvents(MOCK_EVENTS);
-        setPositions(MOCK_POSITIONS);
+        setEvents(INITIAL_EVENTS);
+        setPositions(INITIAL_POSITIONS);
         // Update master status
         setAccounts(prev => prev.map(a => a.role === "master" ? { ...a, status: "copying" } : a));
       }
@@ -2313,10 +2342,19 @@ export default function App() {
       case "proxies": return <ProxyPage accounts={accounts} />;
       case "trades": return <TradeLogPage accounts={accounts} />;
       case "settings": return <SettingsPage accounts={accounts} currentPlan={currentPlan} />;
-      case "profile": return <ProfilePage onSignOut={() => { stopListener(); setPage("overview"); }} currentPlan={currentPlan} onPlanChange={setCurrentPlan} />;
+      case "profile": return <ProfilePage onSignOut={handleSignOut} currentPlan={currentPlan} onPlanChange={setCurrentPlan} user={user} />;
       default: return <OverviewPage accounts={accounts} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} expandedTrade={expandedTrade} setExpandedTrade={setExpandedTrade} />;
     }
   };
+
+  // Auth gate
+  if (!authChecked) {
+    return (<><style>{STYLES}</style><div className="auth-screen"><div className="auth-screen-inner"><div className="auth-screen-brand"><h1 className="auth-screen-title">Phantom Copy</h1><p className="auth-screen-sub">Loading...</p></div></div></div></>);
+  }
+
+  if (!user) {
+    return (<><style>{STYLES}</style><AuthScreen onAuth={handleAuth} /></>);
+  }
 
   return (
     <>
@@ -2350,7 +2388,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-s
 /* Sidebar */
 .sidebar{width:var(--sw);position:fixed;top:0;left:0;bottom:0;background:rgba(255,255,255,0.015);border-right:1px solid var(--bdr);display:flex;flex-direction:column;padding:24px 16px;z-index:20;backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px)}
 .s-logo{display:flex;align-items:center;gap:12px;padding:0 8px;margin-bottom:40px}
-.s-logo-t{font-weight:700;font-size:17px;letter-spacing:-0.02em;background:linear-gradient(135deg,#fff 40%,var(--grn));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.s-logo-t{font-weight:700;font-size:17px;letter-spacing:-0.02em;color:#fff}
 .s-nav{flex:1;display:flex;flex-direction:column;gap:4px}
 .s-btn{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:none;background:transparent;color:var(--t2);font-family:var(--sans);font-size:13.5px;font-weight:500;border-radius:10px;cursor:pointer;transition:all 0.3s var(--ease)}
 .s-btn:hover{background:rgba(255,255,255,0.05);color:var(--t1)}
@@ -2780,9 +2818,9 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-s
 .prov-bar{height:100%;background:var(--acc);border-radius:2px;transition:width 0.8s var(--ease)}
 
 /* Modal */
-.modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;animation:fadeIn 0.3s var(--ease)}
-.modal-shell{background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:28px;padding:6px;width:580px;max-width:95vw;max-height:90vh;overflow-y:auto}
-.modal-inner{background:rgba(12,12,18,0.95);border-radius:24px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 40px 80px rgba(0,0,0,0.5)}
+.modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;animation:fadeIn 0.3s var(--ease);overflow-y:auto;padding:20px}
+.modal-shell{background:var(--bg);border:1px solid var(--bdr);border-radius:20px;padding:6px;width:580px;max-width:95vw;max-height:calc(100vh - 40px);overflow-y:auto;margin:auto}
+.modal-inner{background:rgba(12,12,18,0.98);border-radius:16px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 40px 80px rgba(0,0,0,0.6)}
 .modal-head{display:flex;justify-content:space-between;align-items:flex-start;padding:28px 28px 0}
 .modal-title{font-size:20px;font-weight:700;letter-spacing:-0.02em}
 .modal-sub{font-size:13px;color:var(--t3);margin-top:4px}
