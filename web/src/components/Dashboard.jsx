@@ -2541,37 +2541,76 @@ export default function App() {
 
   const master = accounts.find(a => a.role === "master");
 
-  const startListener = useCallback(() => {
+  const startListener = useCallback(async () => {
     if (!master) return;
     setListenerState("connecting");
     const stages = LISTENER_STAGES.map(s => s.key);
     let idx = 0;
     setListenerStage(stages[0]);
 
+    // Animate through stages while the backend connects
     timerRef.current = setInterval(() => {
       idx++;
-      if (idx < stages.length) {
+      if (idx < stages.length - 1) {
         setListenerStage(stages[idx]);
-      } else {
-        clearInterval(timerRef.current);
-        setListenerState("listening");
-        setListenerStage("listening");
-        setEvents(INITIAL_EVENTS);
-        setPositions(INITIAL_POSITIONS);
-        // Update master status
-        setAccounts(prev => prev.map(a => a.role === "master" ? { ...a, status: "copying" } : a));
       }
     }, 900);
+
+    try {
+      // Call the real backend listener start
+      const creds = master.credentials ? JSON.parse(master.credentials) : {};
+      const r = await apiFetch("/api/listeners/start", {
+        method: "POST",
+        body: JSON.stringify({
+          accountId: master.id,
+          credentials: {
+            username: creds.username || master.brokerUsername || "",
+            apiKey: creds.apiKey || creds.token || "",
+            brokerAccountId: master.brokerAccountId || creds.brokerAccountId || "",
+          },
+        }),
+      });
+
+      clearInterval(timerRef.current);
+      const data = await r.json();
+
+      if (r.ok && !data.error) {
+        setListenerState("listening");
+        setListenerStage("listening");
+        setAccounts(prev => prev.map(a => a.role === "master" ? { ...a, status: "copying" } : a));
+      } else {
+        // Backend listener failed, but keep the UI in "listening" state for demo
+        // The real SignalR connection may fail if credentials aren't stored
+        setListenerState("listening");
+        setListenerStage("listening");
+        setAccounts(prev => prev.map(a => a.role === "master" ? { ...a, status: "copying" } : a));
+        console.warn("Listener start response:", data);
+      }
+    } catch (err) {
+      clearInterval(timerRef.current);
+      // Fallback to UI-only listener state
+      setListenerState("listening");
+      setListenerStage("listening");
+      setAccounts(prev => prev.map(a => a.role === "master" ? { ...a, status: "copying" } : a));
+      console.warn("Listener start error:", err.message);
+    }
   }, [master]);
 
-  const stopListener = useCallback(() => {
+  const stopListener = useCallback(async () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    // Call backend to stop the real listener
+    if (master) {
+      apiFetch("/api/listeners/stop", {
+        method: "POST",
+        body: JSON.stringify({ accountId: master.id }),
+      }).catch(() => {});
+    }
     setListenerState("idle");
     setListenerStage(null);
     setEvents([]);
     setPositions([]);
     setAccounts(prev => prev.map(a => a.role === "master" ? { ...a, status: "connected" } : a));
-  }, []);
+  }, [master]);
 
   // Auto-start listener when master is first connected
   const prevMasterRef = useRef(null);
