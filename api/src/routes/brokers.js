@@ -84,9 +84,11 @@ router.post('/topstepx/accounts', authRequired, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.post('/tradovate/auth', authRequired, async (req, res) => {
-  const { username, password, environment, pTicket, deviceId, mfaCode } = req.body;
+  const { username, password, environment, pTicket, deviceId, mfaCode, cid, sec } = req.body;
 
   const baseUrl = environment === 'live' ? APIS.tradovate.live : APIS.tradovate.demo;
+  const apiCid = cid || 0;
+  const apiSec = sec || '';
 
   // Step 2: MFA code submission
   if (pTicket && mfaCode) {
@@ -100,8 +102,8 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
           appId: 'PhantomCopy',
           appVersion: '1.0',
           deviceId: deviceId || undefined,
-          cid: 0,
-          sec: '',
+          cid: apiCid,
+          sec: apiSec,
           'p-ticket': pTicket,
           'p-captcha': mfaCode,
         }),
@@ -142,8 +144,8 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
         appId: 'PhantomCopy',
         appVersion: '1.0',
         deviceId: devId,
-        cid: 0,
-        sec: '',
+        cid: apiCid,
+        sec: apiSec,
       }),
     });
 
@@ -163,7 +165,7 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
     if (!r.ok || !data.accessToken) {
       return res.status(401).json({
         error: 'auth_failed',
-        message: data.errorText || 'Invalid credentials. Check your username and password.',
+        message: data.errorText || 'Invalid credentials. Make sure you are using your Dedicated API Password (not your regular login password) and correct CID + Secret from Tradovate Settings → API Access.',
       });
     }
 
@@ -288,10 +290,11 @@ router.post('/rithmic/accounts', authRequired, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.post('/ninjatrader/auth', authRequired, async (req, res) => {
-  const { username, password, environment, pTicket, deviceId, mfaCode } = req.body;
+  const { username, password, environment, pTicket, deviceId, mfaCode, cid, sec } = req.body;
   const baseUrl = environment === 'live' ? APIS.tradovate.live : APIS.tradovate.demo;
+  const apiCid = cid || 0;
+  const apiSec = sec || '';
 
-  // Step 2: MFA code submission
   if (pTicket && mfaCode) {
     try {
       const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
@@ -299,7 +302,7 @@ router.post('/ninjatrader/auth', authRequired, async (req, res) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: username, password, appId: 'PhantomCopy', appVersion: '1.0',
-          deviceId: deviceId || undefined, cid: 0, sec: '',
+          deviceId: deviceId || undefined, cid: apiCid, sec: apiSec,
           'p-ticket': pTicket, 'p-captcha': mfaCode,
         }),
       });
@@ -320,7 +323,7 @@ router.post('/ninjatrader/auth', authRequired, async (req, res) => {
     const r = await fetch(`${baseUrl}/auth/accesstokenrequest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: username, password, appId: 'PhantomCopy', appVersion: '1.0', deviceId: devId, cid: 0, sec: '' }),
+      body: JSON.stringify({ name: username, password, appId: 'PhantomCopy', appVersion: '1.0', deviceId: devId, cid: apiCid, sec: apiSec }),
     });
     const data = await r.json();
 
@@ -328,7 +331,7 @@ router.post('/ninjatrader/auth', authRequired, async (req, res) => {
       return res.status(401).json({ error: 'mfa_required', mfaRequired: true, pTicket: data['p-ticket'], deviceId: devId, message: 'Check your email for the verification code.' });
     }
     if (!r.ok || !data.accessToken) {
-      return res.status(401).json({ error: 'auth_failed', message: data.errorText || 'Invalid NinjaTrader credentials.' });
+      return res.status(401).json({ error: 'auth_failed', message: data.errorText || 'Invalid credentials. Use your Dedicated API Password and API Key (CID + Secret) from Tradovate Settings.' });
     }
     res.json({ token: data.accessToken, expiresAt: data.expirationTime, userId: data.userId, platform: 'ninjatrader' });
   } catch (err) {

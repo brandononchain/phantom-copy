@@ -313,6 +313,8 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
   const [authError, setAuthError] = useState(null);
   const [brokerUsername, setBrokerUsername] = useState("");
   const [brokerApiKey, setBrokerApiKey] = useState("");
+  const [brokerCid, setBrokerCid] = useState("");
+  const [brokerSec, setBrokerSec] = useState("");
   const [brokerMfaCode, setBrokerMfaCode] = useState("");
   const [brokerMfaPending, setBrokerMfaPending] = useState(false);
   const [brokerPTicket, setBrokerPTicket] = useState(null);
@@ -387,10 +389,9 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
         authBody = { username: brokerUsername, apiKey: brokerApiKey };
       } else if (pid === "tradovate" || pid === "ninjatrader") {
         if (brokerMfaPending && brokerPTicket) {
-          // Step 2: Submit MFA code
-          authBody = { pTicket: brokerPTicket, deviceId: brokerDeviceId, mfaCode: brokerMfaCode, environment: brokerEnv || "demo" };
+          authBody = { username: brokerUsername, password: brokerApiKey, pTicket: brokerPTicket, deviceId: brokerDeviceId, mfaCode: brokerMfaCode, environment: brokerEnv || "demo", cid: brokerCid ? parseInt(brokerCid) : 0, sec: brokerSec || "" };
         } else {
-          authBody = { username: brokerUsername, password: brokerApiKey, environment: brokerEnv || "demo" };
+          authBody = { username: brokerUsername, password: brokerApiKey, environment: brokerEnv || "demo", cid: brokerCid ? parseInt(brokerCid) : 0, sec: brokerSec || "" };
         }
       } else if (pid === "rithmic") {
         authBody = { username: brokerUsername, password: brokerApiKey, environment: brokerEnv || "Rithmic Paper Trading" };
@@ -613,11 +614,22 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
                       <div className="auth-brand"><div className="auth-brand-icon" style={{ background: `${platform.color}20`, color: platform.color }}>{platform.icon}</div><span className="auth-brand-name">{platform.name}</span></div>
                       <p className="auth-brand-sub">Sign in with your {platform.name} account</p>
                       <div className="auth-field"><label>{platform?.id === "rithmic" ? "R|Trader Username" : platform?.id === "topstepx" ? "TopStepX Username" : "Email or Username"}</label><input type="text" placeholder={platform?.id === "rithmic" ? "rithmic_user" : platform?.id === "topstepx" ? "your_username" : "trader@example.com"} className="auth-input" value={brokerUsername} onChange={e => setBrokerUsername(e.target.value)} /></div>
-                      <div className="auth-field"><label>{platform?.id === "topstepx" ? "API Key" : "Password"}</label><input type={platform?.id === "topstepx" ? "text" : "password"} placeholder={platform?.id === "topstepx" ? "Paste API key from your firm" : "Your password"} className="auth-input" value={brokerApiKey} onChange={e => setBrokerApiKey(e.target.value)} style={platform?.id === "topstepx" ? { fontFamily: "var(--mono)", fontSize: 12 } : {}} /></div>
+                      <div className="auth-field"><label>{platform?.id === "topstepx" ? "API Key" : "Dedicated API Password"}</label><input type={platform?.id === "topstepx" ? "text" : "password"} placeholder={platform?.id === "topstepx" ? "Paste API key from your firm" : "From Tradovate Settings → API Access"} className="auth-input" value={brokerApiKey} onChange={e => setBrokerApiKey(e.target.value)} style={platform?.id === "topstepx" ? { fontFamily: "var(--mono)", fontSize: 12 } : {}} /></div>
                       {platform?.id === "rithmic" && (
                         <div className="auth-field"><label>Environment</label>
                           <select className="auth-input" value={brokerEnv} onChange={e => setBrokerEnv(e.target.value)}><option>Rithmic Paper Trading</option><option>Rithmic 01 (Live)</option><option>Rithmic Demo</option></select>
                         </div>
+                      )}
+                      {(platform?.id === "tradovate" || platform?.id === "ninjatrader") && (
+                        <>
+                          <div style={{background:"rgba(59,130,246,0.06)",borderRadius:8,border:"1px solid rgba(59,130,246,0.12)",padding:"10px 12px",margin:"0 0 12px",fontSize:11,color:"var(--t3)",lineHeight:1.5}}>
+                            <span style={{color:"#3B82F6",fontWeight:600}}>API Key Required:</span> Go to <span style={{color:"var(--t1)",fontWeight:500}}>Tradovate → Settings → API Access</span> → Create a Dedicated Password, then Generate API Key. You'll get a CID number and Secret.
+                          </div>
+                          <div style={{display:"flex",gap:8}}>
+                            <div className="auth-field" style={{flex:"0 0 100px"}}><label>CID</label><input type="text" placeholder="e.g. 154" className="auth-input" value={brokerCid} onChange={e => setBrokerCid(e.target.value)} style={{ fontFamily: "var(--mono)", fontSize: 13, textAlign: "center" }} /></div>
+                            <div className="auth-field" style={{flex:1}}><label>API Secret</label><input type="password" placeholder="e.g. c5c0ff2f-45cb-481b-9d07-..." className="auth-input" value={brokerSec} onChange={e => setBrokerSec(e.target.value)} style={{ fontFamily: "var(--mono)", fontSize: 12 }} /></div>
+                          </div>
+                        </>
                       )}
                       {(platform?.id === "tradovate" || platform?.id === "ninjatrader") && (
                         <div className="auth-field"><label>Environment</label>
