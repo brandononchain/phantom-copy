@@ -301,6 +301,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
   const [brokerUsername, setBrokerUsername] = useState("");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerToken, setBrokerToken] = useState(null);
+  const [brokerEnv, setBrokerEnv] = useState("Rithmic Paper Trading");
   const [role, setRole] = useState(existingMaster ? "follower" : "master");
   const [label, setLabel] = useState("");
   const [proxyRegion, setProxyRegion] = useState("US-East");
@@ -361,50 +362,47 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
     setAuthState("loading");
     setAuthError(null);
 
+    const pid = platform?.id;
     try {
-      if (platform?.id === "topstepx") {
-        // Real ProjectX auth via our API proxy
-        const authRes = await fetch("/api/brokers/topstepx/auth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ username: brokerUsername, apiKey: brokerApiKey }),
-        });
-        const authData = await authRes.json();
-        if (!authRes.ok) throw new Error(authData.message || authData.error || "Authentication failed");
-
-        setBrokerToken(authData.token);
-
-        // Fetch real accounts
-        const acctRes = await fetch("/api/brokers/topstepx/accounts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ token: authData.token }),
-        });
-        const acctData = await acctRes.json();
-        if (!acctRes.ok) throw new Error(acctData.message || "Failed to fetch accounts");
-
-        setBrokerAccounts((acctData.accounts || []).map(a => ({
-          id: String(a.id),
-          name: a.name,
-          balance: a.balance != null ? `$${Number(a.balance).toLocaleString()}` : "N/A",
-          type: a.simulated ? "Simulation" : a.canTrade ? "Live" : "Inactive",
-        })));
-
-        setAuthState("success");
-      } else {
-        // Other brokers: call their auth endpoint (returns 501 for now)
-        const authRes = await fetch(`/api/brokers/${platform?.id}/auth`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ username: brokerUsername, password: brokerApiKey }),
-        });
-        const authData = await authRes.json();
-        if (!authRes.ok) throw new Error(authData.message || authData.error || "Not yet supported");
-        setAuthState("success");
+      // Build auth payload per platform
+      let authBody, acctBody;
+      if (pid === "topstepx") {
+        authBody = { username: brokerUsername, apiKey: brokerApiKey };
+      } else if (pid === "tradovate" || pid === "ninjatrader") {
+        authBody = { username: brokerUsername, password: brokerApiKey, environment: "demo" };
+      } else if (pid === "rithmic") {
+        authBody = { username: brokerUsername, password: brokerApiKey, environment: brokerEnv || "Rithmic Paper Trading" };
       }
+
+      // Step 1: Authenticate
+      const authRes = await fetch(`/api/brokers/${pid}/auth`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify(authBody),
+      });
+      const authData = await authRes.json();
+      if (!authRes.ok) throw new Error(authData.message || authData.error || "Authentication failed");
+      setBrokerToken(authData.token);
+
+      // Step 2: Fetch accounts
+      acctBody = { token: authData.token };
+      if (pid === "tradovate" || pid === "ninjatrader") acctBody.environment = "demo";
+      if (pid === "rithmic") acctBody.username = brokerUsername;
+
+      const acctRes = await fetch(`/api/brokers/${pid}/accounts`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify(acctBody),
+      });
+      const acctData = await acctRes.json();
+      if (!acctRes.ok) throw new Error(acctData.message || "Failed to fetch accounts");
+
+      setBrokerAccounts((acctData.accounts || []).map(a => ({
+        id: String(a.id),
+        name: a.name || a.nickname || `Account ${a.id}`,
+        balance: a.balance != null ? `$${Number(a.balance).toLocaleString()}` : "N/A",
+        type: a.type || (a.simulated ? "Simulation" : a.canTrade ? "Live" : a.active === false ? "Inactive" : "Trading"),
+      })));
+
+      setAuthState("success");
     } catch (err) {
       setAuthError(err.message);
       setAuthState("idle");
@@ -545,7 +543,12 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener }) {
                       <div className="auth-field"><label>{platform?.id === "topstepx" ? "API Key" : "Password"}</label><input type={platform?.id === "topstepx" ? "text" : "password"} placeholder={platform?.id === "topstepx" ? "Paste API key from your firm" : "Your password"} className="auth-input" value={brokerApiKey} onChange={e => setBrokerApiKey(e.target.value)} style={platform?.id === "topstepx" ? { fontFamily: "var(--mono)", fontSize: 12 } : {}} /></div>
                       {platform?.id === "rithmic" && (
                         <div className="auth-field"><label>Environment</label>
-                          <select className="auth-input"><option>Rithmic Paper Trading</option><option>Rithmic 01 (Live)</option></select>
+                          <select className="auth-input" value={brokerEnv} onChange={e => setBrokerEnv(e.target.value)}><option>Rithmic Paper Trading</option><option>Rithmic 01 (Live)</option><option>Rithmic Demo</option></select>
+                        </div>
+                      )}
+                      {(platform?.id === "tradovate" || platform?.id === "ninjatrader") && (
+                        <div className="auth-field"><label>Environment</label>
+                          <select className="auth-input" value={brokerEnv} onChange={e => setBrokerEnv(e.target.value)}><option value="demo">Demo / Simulation</option><option value="live">Live Trading</option></select>
                         </div>
                       )}
                       {authError && <div className="auth-screen-error" style={{marginBottom:12}}>{authError}</div>}
