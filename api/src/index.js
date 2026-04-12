@@ -23,7 +23,22 @@ const app = express();
 // ── Middleware ────────────────────────────────────────────────────────────────
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: config.cors.origin, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow Railway domains, localhost, and configured frontend URL
+    const allowed = [
+      config.cors.origin,
+      'https://web-production-0433b.up.railway.app',
+      'http://localhost:3000',
+    ].filter(Boolean);
+    if (!origin || allowed.some(a => origin.startsWith(a.replace(/\/$/, '')))) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all in production for now (API key auth is the real gate)
+    }
+  },
+  credentials: true,
+}));
 app.use(morgan(config.isDev ? 'dev' : 'combined'));
 app.use(cookieParser());
 
