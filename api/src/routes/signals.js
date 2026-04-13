@@ -13,6 +13,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { query } from '../db/pool.js';
 import { copyEngine } from '../services/copy-engine.js';
+import { resolveContractId, normalizeTicker, getContractInfo } from '../services/contracts.js';
 
 const router = Router();
 
@@ -21,40 +22,7 @@ const router = Router();
 // TopStepX/Tradovate use numeric contractIds
 // This maps common futures symbols to their IDs
 
-const SYMBOL_MAP = {
-  // E-mini futures - TopStepX uses CON.F.US.{SYMBOL}.{MONTH_CODE}{YEAR} format
-  // We use a function to resolve the current front month
-  'ES':   { tradovate: 'ES',  name: 'E-mini S&P 500' },
-  'NQ':   { tradovate: 'NQ',  name: 'E-mini Nasdaq 100' },
-  'YM':   { tradovate: 'YM',  name: 'E-mini Dow' },
-  'RTY':  { tradovate: 'RTY', name: 'E-mini Russell 2000' },
-  'GC':   { tradovate: 'GC',  name: 'Gold' },
-  'CL':   { tradovate: 'CL',  name: 'Crude Oil' },
-  'SI':   { tradovate: 'SI',  name: 'Silver' },
-  // Micro futures
-  'MES':  { tradovate: 'MES', name: 'Micro E-mini S&P 500' },
-  'MNQ':  { tradovate: 'MNQ', name: 'Micro E-mini Nasdaq 100' },
-  'MYM':  { tradovate: 'MYM', name: 'Micro E-mini Dow' },
-  'M2K':  { tradovate: 'M2K', name: 'Micro E-mini Russell' },
-  'MGC':  { tradovate: 'MGC', name: 'Micro Gold' },
-  'MCL':  { tradovate: 'MCL', name: 'Micro Crude Oil' },
-};
-
-// TopStepX uses CON.F.US.{SYMBOL}.{MONTH_CODE}{YY} format
-// Month codes: F=Jan, G=Feb, H=Mar, J=Apr, K=May, M=Jun, N=Jul, Q=Aug, U=Sep, V=Oct, X=Nov, Z=Dec
-function getProjectXContractId(ticker) {
-  const months = ['F','G','H','J','K','M','N','Q','U','V','X','Z'];
-  const now = new Date();
-  // Get front month (current or next month)
-  let monthIdx = now.getMonth();
-  let year = now.getFullYear() % 100;
-  // If we're past the 15th, use next month
-  if (now.getDate() > 15) {
-    monthIdx = (monthIdx + 1) % 12;
-    if (monthIdx === 0) year++;
-  }
-  return `CON.F.US.${ticker}.${months[monthIdx]}${year}`;
-}
+// Contract resolution handled by services/contracts.js
 
 // ── Parse TradingView/TrendSpider/Custom signal ──────────────────────────────
 
@@ -302,17 +270,9 @@ router.post('/:signalKey', async (req, res) => {
   const master = masterResult.rows[0];
 
   // 4. Resolve contract ID for the master's platform
-  const symbolInfo = SYMBOL_MAP[signal.ticker];
-  let contractId;
-
-  if (master.platform === 'topstepx') {
-    // TopStepX uses CON.F.US.NQ.M26 format
-    contractId = getProjectXContractId(signal.ticker);
-  } else if (master.platform === 'tradovate') {
-    contractId = symbolInfo?.tradovate || signal.ticker;
-  } else {
-    contractId = signal.ticker;
-  }
+  const normalizedTicker = normalizeTicker(signal.ticker) || signal.ticker;
+  const contractInfo = getContractInfo(normalizedTicker);
+  const contractId = resolveContractId(normalizedTicker, master.platform);
 
   // 5. Place order on master account
   let masterOrderResult;

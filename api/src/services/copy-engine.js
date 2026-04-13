@@ -78,30 +78,52 @@ export class CopyEngine extends EventEmitter {
       const executionId = execResult.rows[0].id;
 
       // 3. Find all follower accounts for this user on the same platform
-      const followers = await query(
-        `SELECT a.*, pa.ip_address, pa.provider, pa.session_id AS proxy_session
-         FROM accounts a
-         LEFT JOIN proxy_assignments pa ON pa.account_id = a.id
-         WHERE a.user_id = $1 AND a.role = 'follower' AND a.platform = $2 AND a.status = 'connected'`,
-        [master.user_id, master.platform]
-      );
+      //    AND fetch risk rules + overrides in ONE query batch (latency optimization)
+      const [followers, riskResult, overridesResult, dailyStats] = await Promise.all([
+        query(
+          `SELECT a.*, pa.ip_address, pa.provider, pa.session_id AS proxy_session
+           FROM accounts a
+           LEFT JOIN proxy_assignments pa ON pa.account_id = a.id
+           WHERE a.user_id = $1 AND a.role = 'follower' AND a.status = 'connected'`,
+          [master.user_id]
+        ),
+        query('SELECT * FROM risk_rules WHERE user_id = $1', [master.user_id]),
+        query('SELECT * FROM follower_overrides WHERE user_id = $1', [master.user_id]),
+        query(
+          `SELECT COUNT(*) as trade_count, COALESCE(SUM(master_price), 0) as daily_pnl
+           FROM copy_executions WHERE user_id = $1 AND timestamp >= CURRENT_DATE`,
+          [master.user_id]
+        ),
+      ]);
 
       if (followers.rows.length === 0) {
         console.log(`[COPY-ENGINE] No followers to replicate to for master ${masterId}`);
         return;
       }
 
-      // 4. Check follower overrides and risk rules
-      const riskResult = await query(
-        'SELECT * FROM risk_rules WHERE user_id = $1',
-        [master.user_id]
-      );
+      // 4. Check risk rules (fetched in batch above)
       const riskRules = riskResult.rows[0] || {};
+      const overridesMap = new Map(overridesResult.rows.map(o => [o.account_id, o]));
+      const todayStats = dailyStats.rows[0] || { trade_count: 0, daily_pnl: 0 };
 
       // Kill switch check
       if (riskRules.kill_switch) {
         console.log(`[COPY-ENGINE] Kill switch active for user ${master.user_id}. Skipping.`);
         this.emit('event', { type: 'risk', msg: 'Kill switch active. Trade not copied.' });
+        return;
+      }
+
+      // Daily loss limit check
+      if (riskRules.daily_loss_limit && Math.abs(parseFloat(todayStats.daily_pnl)) >= parseFloat(riskRules.daily_loss_limit)) {
+        console.log(`[COPY-ENGINE] Daily loss limit reached ($${todayStats.daily_pnl}). Skipping.`);
+        this.emit('event', { type: 'risk', msg: `Daily loss limit reached: $${todayStats.daily_pnl}` });
+        return;
+      }
+
+      // Max trades per day check
+      if (riskRules.max_trades_per_day && parseInt(todayStats.trade_count) >= parseInt(riskRules.max_trades_per_day)) {
+        console.log(`[COPY-ENGINE] Max trades/day reached (${todayStats.trade_count}). Skipping.`);
+        this.emit('event', { type: 'risk', msg: `Max trades per day reached: ${todayStats.trade_count}` });
         return;
       }
 
@@ -113,6 +135,7 @@ export class CopyEngine extends EventEmitter {
           executionId,
           riskRules,
           userId: master.user_id,
+          override: overridesMap.get(follower.id) || {},
         }))
       );
 
@@ -145,16 +168,11 @@ export class CopyEngine extends EventEmitter {
 
   // ── Execute on a single follower ───────────────────────────────────────
 
-  async executeOnFollower({ follower, signal, executionId, riskRules, userId }) {
+  async executeOnFollower({ follower, signal, executionId, riskRules, userId, override }) {
     const start = Date.now();
 
     try {
-      // Get follower override for qty multiplier
-      const overrideResult = await query(
-        'SELECT * FROM follower_overrides WHERE user_id = $1 AND account_id = $2',
-        [userId, follower.id]
-      );
-      const override = overrideResult.rows[0] || {};
+      // Use pre-fetched override (no DB call needed)
       const multiplier = override.size_multiplier || 1.0;
 
       // Apply qty limits
@@ -247,8 +265,45 @@ export class CopyEngine extends EventEmitter {
         accountId: parseInt(follower.broker_account_id),
         proxyAgent: agent,
       });
+    } else if (follower.platform === 'tradovate' || follower.platform === 'ninjatrader') {
+      // Tradovate REST API client with proxy
+      client = {
+        async placeOrder({ contractId, side, qty, orderType, limitPrice, stopPrice }) {
+          const baseUrl = 'https://demo.tradovateapi.com/v1';
+          const body = {
+            accountSpec: follower.broker_account_id,
+            accountId: parseInt(follower.broker_account_id),
+            action: side === 'Buy' ? 'Buy' : 'Sell',
+            symbol: contractId,
+            orderQty: qty,
+            orderType: orderType || 'Market',
+            isAutomated: true,
+          };
+          if (orderType === 'Limit' && limitPrice) body.price = limitPrice;
+          if (orderType === 'Stop' && stopPrice) body.stopPrice = stopPrice;
+
+          const fetchOpts = {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${creds.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          };
+          if (agent) fetchOpts.agent = agent;
+
+          const res = await fetch(`${baseUrl}/order/placeorder`, fetchOpts);
+          const data = await res.json();
+          if (data.failureReason) throw new Error(data.failureReason);
+          return { orderId: data.orderId, platform: 'tradovate' };
+        }
+      };
+    } else if (follower.platform === 'rithmic') {
+      // Rithmic placeholder - requires WebSocket protocol
+      client = {
+        async placeOrder() {
+          throw new Error('Rithmic copy execution requires active WebSocket session');
+        }
+      };
     } else {
-      throw new Error(`Copy client not implemented for platform: ${follower.platform}`);
+      throw new Error(`Unknown platform: ${follower.platform}`);
     }
 
     this.followerClients.set(follower.id, client);
