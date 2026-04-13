@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db/pool.js';
 import { authRequired, requirePlan } from '../middleware/auth.js';
+import { sendAccountConnectedEmail } from '../services/email.js';
 
 const router = Router();
 
@@ -56,6 +57,12 @@ router.post('/', authRequired, async (req, res) => {
      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
     [req.user.id, platform, role, brokerAccountId, label, credentials]
   );
+
+  // Send account connected email (non-blocking)
+  const userInfo = await query('SELECT email, name FROM users WHERE id = $1', [req.user.id]);
+  if (userInfo.rows[0]) {
+    sendAccountConnectedEmail(userInfo.rows[0].email, { name: userInfo.rows[0].name, platform, role, label }).catch(() => {});
+  }
 
   res.status(201).json({ account: result.rows[0] });
 });

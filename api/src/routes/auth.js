@@ -6,7 +6,7 @@ import QRCode from 'qrcode';
 import { query } from '../db/pool.js';
 import { config } from '../config/index.js';
 import { authRequired } from '../middleware/auth.js';
-import { sendWelcomeEmail, sendPasswordResetEmail, send2FASetupEmail } from '../services/email.js';
+import { sendWelcomeEmail, sendPasswordResetEmail, sendPasswordChangedEmail, send2FASetupEmail, send2FADisabledEmail } from '../services/email.js';
 
 const router = Router();
 
@@ -189,7 +189,7 @@ router.post('/change-password', authRequired, async (req, res) => {
 
     const hash = await bcrypt.hash(newPassword, 12);
     await query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id]);
-    res.json({ success: true, message: 'Password changed successfully' });
+    const u = await query('SELECT email, name FROM users WHERE id = $1', [req.user.id]); sendPasswordChangedEmail(u.rows[0].email, u.rows[0].name).catch(() => {}); res.json({ success: true, message: 'Password changed successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Password change failed' });
   }
@@ -266,7 +266,7 @@ router.post('/2fa/disable', authRequired, async (req, res) => {
     const valid = await bcrypt.compare(password, user.rows[0].password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid password' });
 
-    await query('UPDATE users SET totp_secret = NULL, totp_enabled = false WHERE id = $1', [req.user.id]);
+    await query('UPDATE users SET totp_secret = NULL, totp_enabled = false WHERE id = $1', [req.user.id]); const u2 = await query('SELECT email, name FROM users WHERE id = $1', [req.user.id]); send2FADisabledEmail(u2.rows[0].email, u2.rows[0].name).catch(() => {});
     res.json({ success: true, message: '2FA has been disabled' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to disable 2FA' });
