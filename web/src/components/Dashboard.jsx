@@ -2806,7 +2806,11 @@ function AuthScreen({ onAuth }) {
           </div>
         </div>
 
-        <p className="auth-screen-footer">Copy trades across unlimited accounts with IP isolation per connection.</p>
+        <p className="auth-screen-footer">
+          By signing in or creating an account, you agree to our{' '}
+          <a href="/terms" style={{ color: "#6366f1", textDecoration: "none" }}>Terms & Conditions</a> and{' '}
+          <a href="/privacy" style={{ color: "#6366f1", textDecoration: "none" }}>Privacy Policy</a>.
+        </p>
       </div>
     </div>
   );
