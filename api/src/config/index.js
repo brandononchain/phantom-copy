@@ -53,7 +53,7 @@ export const config = {
   tradovate: {
     clientId: process.env.TRADOVATE_CLIENT_ID,
     clientSecret: process.env.TRADOVATE_CLIENT_SECRET,
-    redirectUri: process.env.TRADOVATE_REDIRECT_URI || 'https://api.tradevanish.com/api/brokers/tradovate/callback',
+    redirectUri: process.env.TRADOVATE_REDIRECT_URI || 'https://app.tradevanish.com/api/brokers/tradovate/callback',
     authUrl: 'https://trader.tradovate.com/oauth',
     demoExchangeUrl: 'https://demo.tradovateapi.com/auth/oauthtoken',
     liveExchangeUrl: 'https://live.tradovateapi.com/auth/oauthtoken',
