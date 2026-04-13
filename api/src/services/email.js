@@ -38,10 +38,10 @@ ${preheader ? `<span style="display:none;font-size:1px;color:${B.bg};max-height:
 <div style="max-width:520px;margin:0 auto;padding:48px 20px 32px">
   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px"><tr>
     <td align="center">
-      <div style="display:inline-flex;align-items:center;gap:10px">
-        <div style="width:32px;height:32px;background:${B.purpleGrad};border-radius:8px"></div>
-        <span style="font-size:20px;font-weight:800;color:${B.t1};letter-spacing:-0.03em">Tradevanish</span>
-      </div>
+      <table cellpadding="0" cellspacing="0" style="display:inline-table"><tr>
+            <td style="vertical-align:middle;padding-right:10px"><img src="https://www.tradevanish.com/logo.png" alt="TV" width="32" height="32" style="border-radius:8px;display:block" /></td>
+            <td style="vertical-align:middle"><span style="font-size:20px;font-weight:800;color:${B.t1};letter-spacing:-0.03em">Tradevanish</span></td>
+          </tr></table>
     </td>
   </tr></table>
   <div style="background:${B.card};border:1px solid ${B.border};border-radius:16px;padding:32px 28px">
