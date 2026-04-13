@@ -40,12 +40,14 @@ const fmt = (n) => (n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}`
 
 function apiFetch(path, options = {}) {
   const token = typeof window !== "undefined" ? localStorage.getItem("tv_token") : null;
+  // Don't send Authorization header on auth endpoints (login/register/reset)
+  const isAuthEndpoint = path.includes("/auth/login") || path.includes("/auth/register") || path.includes("/auth/reset");
   return fetch(path, {
     credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      ...(token && !isAuthEndpoint ? { "Authorization": `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
@@ -2627,12 +2629,13 @@ function Placeholder({ title, sub }) {
 
 // ─── Auth Screen ─────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
-  const [mode, setMode] = useState("login"); // login | register | forgot | reset
+  const [mode, setMode] = useState("login"); // login | register | forgot | reset | 2fa
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -2673,12 +2676,25 @@ function AuthScreen({ onAuth }) {
     setLoading(true); setError(null);
 
     try {
-      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
-      const body = mode === "login" ? { email, password } : { email, password, name };
+      const endpoint = mode === "login" || mode === "2fa" ? "/api/auth/login" : "/api/auth/register";
+      const body = mode === "register" 
+        ? { email, password, name } 
+        : mode === "2fa"
+        ? { email, password, totp_code: totpCode }
+        : { email, password };
       const res = await apiFetch(endpoint, {
         method: "POST", body: JSON.stringify(body),
       });
       const data = await res.json();
+      
+      // Handle 2FA requirement
+      if (data.requires_2fa) {
+        setMode("2fa");
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      
       if (!res.ok) throw new Error(data.error || "Authentication failed");
       onAuth(data.user, data.token);
     } catch (err) {
@@ -2714,6 +2730,13 @@ function AuthScreen({ onAuth }) {
             </div>
           )}
 
+          {mode === "2fa" && (
+            <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--bdr)", marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--t1)", margin: 0, fontFamily: "var(--sans)", letterSpacing: "-0.02em" }}>Two-Factor Authentication</h2>
+              <p style={{ fontSize: 13, color: "var(--t3)", margin: "6px 0 0", fontFamily: "var(--sans)" }}>Enter the 6-digit code from your authenticator app</p>
+            </div>
+          )}
+
           <div className="auth-screen-form">
             {mode === "register" && (
               <div className="set-field"><label className="set-label">FULL NAME</label><input type="text" className="set-input" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} /></div>
@@ -2734,11 +2757,15 @@ function AuthScreen({ onAuth }) {
               </>
             )}
 
+            {mode === "2fa" && (
+              <div className="set-field"><label className="set-label">AUTHENTICATOR CODE</label><input type="text" className="set-input" placeholder="6-digit code from your app" value={totpCode} onChange={e => setTotpCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} style={{ fontFamily: "var(--mono)", fontSize: 16, letterSpacing: "3px", textAlign: "center" }} maxLength={6} autoFocus /></div>
+            )}
+
             {successMsg && <div style={{ background: "rgba(0,229,160,0.08)", border: "1px solid rgba(0,229,160,0.2)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#00E5A0", marginBottom: 8 }}>{successMsg}</div>}
             {error && <div className="auth-screen-error">{error}</div>}
 
             <button className="btn-primary btn-full" onClick={handleSubmit} disabled={loading} style={{ marginTop: 20 }}>
-              <span>{loading ? "Processing..." : mode === "login" ? "Sign In" : mode === "register" ? "Create Account" : mode === "forgot" ? "Send Reset Code" : "Reset Password"}</span>
+              <span>{loading ? "Processing..." : mode === "login" ? "Sign In" : mode === "register" ? "Create Account" : mode === "forgot" ? "Send Reset Code" : mode === "2fa" ? "Verify Code" : "Reset Password"}</span>
               <span className="btn-aw"><span className="btn-ar">{loading ? "..." : "\u2192"}</span></span>
             </button>
 
