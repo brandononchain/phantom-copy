@@ -1,6 +1,16 @@
 export const metadata = {
   title: 'Tradevanish | The Stealth Standard for Modern Prop Trading',
   description: 'Copy trades across unlimited accounts with dedicated residential proxy IP isolation per account.',
+  icons: {
+    icon: [
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
+    shortcut: '/favicon.ico',
+  },
+  manifest: '/site.webmanifest',
+  themeColor: '#050508',
 };
 
 export default function RootLayout({ children }) {
