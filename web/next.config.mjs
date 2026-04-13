@@ -2,11 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
-    // Use Railway internal URL for server-side proxying (no egress, same-origin cookies)
-    // Falls back to public URL, then localhost for dev
     const apiUrl = process.env.API_INTERNAL_URL
       || process.env.NEXT_PUBLIC_API_URL
-      || 'http://localhost:3001';
+      || 'https://api-production-e175.up.railway.app';
     return [
       {
         source: '/api/:path*',
