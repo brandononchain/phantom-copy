@@ -2690,7 +2690,10 @@ function AuthScreen({ onAuth }) {
     <div className="auth-screen">
       <div className="auth-screen-inner fade-in">
         <div className="auth-screen-brand">
-          <h1 className="auth-screen-title">Tradevanish</h1>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 6 }}>
+            <img src="/logo.png" alt="Tradevanish" width="38" height="38" style={{ borderRadius: 8 }} />
+            <h1 className="auth-screen-title">Tradevanish</h1>
+          </div>
           <p className="auth-screen-sub">The Stealth Standard for Modern Prop Trading</p>
         </div>
 
@@ -2975,7 +2978,7 @@ export default function App() {
 
   // Auth gate
   if (!authChecked) {
-    return (<><style>{STYLES}</style><div className="auth-screen"><div className="auth-screen-inner"><div className="auth-screen-brand"><h1 className="auth-screen-title">Tradevanish</h1><p className="auth-screen-sub">Loading...</p></div></div></div></>);
+    return (<><style>{STYLES}</style><div className="auth-screen"><div className="auth-screen-inner"><div className="auth-screen-brand"><div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 6 }}><img src="/logo.png" alt="Tradevanish" width="38" height="38" style={{ borderRadius: 8 }} /><h1 className="auth-screen-title">Tradevanish</h1></div><p className="auth-screen-sub">Loading...</p></div></div></div></>);
   }
 
   if (!user) {
