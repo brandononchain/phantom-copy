@@ -32,7 +32,7 @@ app.use(cors({
     // Allow Railway domains, localhost, and configured frontend URL
     const allowed = [
       config.cors.origin,
-      'https://app.tradevanish.com',
+      'https://app.tradevanish.com', 'https://www.tradevanish.com', 'https://web-production-0433b.up.railway.app',
       'https://tradevanish.com',
       'https://www.tradevanish.com',
       'http://localhost:3000',
