@@ -1366,10 +1366,26 @@ function SettingsPage({ accounts }) {
         if (data.rules.kill_switch != null) setKillSwitchActive(data.rules.kill_switch);
       }
     }).catch(() => {});
+
+    // Load follower overrides from DB
+    apiFetch("/api/settings/overrides").then(r => r.ok ? r.json() : null).then(data => {
+      if (data?.overrides?.length) {
+        const map = {};
+        data.overrides.forEach(o => {
+          map[o.account_id] = {
+            sizeMultiplier: o.size_multiplier || 1.0,
+            maxQty: o.max_qty || "",
+            dailyLoss: o.daily_loss_limit ? Number(o.daily_loss_limit) : "",
+          };
+        });
+        setFollowerOverrides(map);
+      }
+    }).catch(() => {});
   }, []);
 
   const handleSave = async () => {
     try {
+      // Save risk rules
       const r = await apiFetch("/api/settings/risk", {
         method: "PUT",
         body: JSON.stringify({
@@ -1380,12 +1396,23 @@ function SettingsPage({ accounts }) {
           kill_switch: killSwitchActive,
         }),
       });
-      if (r.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-      } else {
-        alert("Save failed");
-      }
+      if (!r.ok) throw new Error("Risk rules save failed");
+
+      // Save follower overrides
+      const overridePromises = Object.entries(followerOverrides).map(([accountId, ov]) =>
+        apiFetch(`/api/settings/overrides/${accountId}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            max_qty: ov.maxQty || null,
+            daily_loss_limit: ov.dailyLoss || null,
+            size_multiplier: ov.sizeMultiplier || 1.0,
+          }),
+        })
+      );
+      await Promise.all(overridePromises);
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       alert("Save failed: " + err.message);
     }
@@ -2817,8 +2844,14 @@ export default function App() {
       .then(data => {
         if (data?.user) {
           setUser(data.user);
-          setAuthToken("session");
           setCurrentPlan(data.user.plan || "basic");
+          // Store token in localStorage for Bearer auth on all API calls
+          if (data.token && typeof window !== "undefined") {
+            localStorage.setItem("tv_token", data.token);
+            setAuthToken(data.token);
+          } else {
+            setAuthToken("session");
+          }
           // Load saved accounts from DB
           apiFetch("/api/accounts").then(r => r.ok ? r.json() : null).then(acctData => {
             if (acctData?.accounts?.length) {

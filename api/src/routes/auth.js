@@ -95,7 +95,9 @@ router.get('/me', authRequired, async (req, res) => {
       [req.user.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    res.json({ user: result.rows[0] });
+    // Return a fresh token so the frontend can store it in localStorage
+    const freshToken = signToken(result.rows[0]);
+    res.json({ user: result.rows[0], token: freshToken });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
