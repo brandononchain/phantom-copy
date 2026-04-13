@@ -84,6 +84,19 @@ const migrations = [
       ALTER TABLE api_keys ADD CONSTRAINT api_keys_env_check CHECK (env IN ('live','test'));
     `,
   },
+  {
+    id: '006_2fa',
+    up: `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code VARCHAR(10);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_expires TIMESTAMPTZ;
+    `,
+    down: `
+      ALTER TABLE users DROP COLUMN IF EXISTS totp_secret;
+      ALTER TABLE users DROP COLUMN IF EXISTS totp_enabled;
+    `,
+  },
 ];
 
 export async function runMigrations(pool) {

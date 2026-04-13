@@ -39,11 +39,13 @@ const fmt = (n) => (n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}`
 // ─── API Helper (same-origin via Next.js proxy, cookies work natively) ───────
 
 function apiFetch(path, options = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("tv_token") : null;
   return fetch(path, {
     credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
@@ -2821,10 +2823,12 @@ export default function App() {
     setAuthToken(token);
     setCurrentPlan(userData.plan || "basic");
     setShowOnboarding(true);
+    if (token && typeof window !== "undefined") localStorage.setItem("tv_token", token);
   };
 
   const handleSignOut = () => {
     apiFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    if (typeof window !== "undefined") localStorage.removeItem("tv_token");
     setUser(null); setAuthToken(null); setPage("overview"); setAccounts([]); stopListener();
   };
 
