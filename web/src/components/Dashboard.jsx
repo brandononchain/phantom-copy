@@ -2641,7 +2641,7 @@ function ProfilePage({ onSignOut, currentPlan, onPlanChange, user }) {
         {!showSignOut ? (
           <button className="prof-signout-btn" onClick={() => setShowSignOut(true)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>
         ) : (
-          <div className="prof-signout-confirm fade-in"><p className="prof-signout-msg">Sign out of Tradevanish? Active listeners will stop.</p><div className="prof-signout-actions"><button className="prof-signout-yes" onClick={onSignOut}>Yes, Sign Out</button><button className="btn-ghost" onClick={() => setShowSignOut(false)}>Cancel</button></div></div>
+          <div className="prof-signout-confirm fade-in"><p className="prof-signout-msg">Sign out of Tradevanish? Your listeners and copy trading will continue running in the cloud.</p><div className="prof-signout-actions"><button className="prof-signout-yes" onClick={onSignOut}>Sign Out</button><button className="btn-ghost" onClick={() => setShowSignOut(false)}>Cancel</button></div></div>
         )}
       </div>
 
@@ -2867,6 +2867,14 @@ export default function App() {
             }
           }).catch(() => {});
 
+          // Check if a listener is already running server-side
+          apiFetch("/api/listeners/status").then(r => r.ok ? r.json() : null).then(status => {
+            if (status?.activeSessions > 0) {
+              setListenerState("listening");
+              setListenerStage("connected");
+            }
+          }).catch(() => {});
+
           // Handle Tradovate OAuth callback token - reopen connect modal at account selection step
           if (tradovateToken) {
             setOauthResume({ token: tradovateToken, env: tradovateEnv, platform: "tradovate" });
@@ -2889,7 +2897,10 @@ export default function App() {
   const handleSignOut = () => {
     apiFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     if (typeof window !== "undefined") localStorage.removeItem("tv_token");
-    setUser(null); setAuthToken(null); setPage("overview"); setAccounts([]); stopListener();
+    // Clear UI state only - do NOT stop backend listeners
+    // Listeners run server-side and should persist across sessions
+    setUser(null); setAuthToken(null); setPage("overview"); setAccounts([]);
+    setListenerState("idle"); setListenerStage(null); setEvents([]); setPositions([]);
   };
 
   // Master listener state machine
