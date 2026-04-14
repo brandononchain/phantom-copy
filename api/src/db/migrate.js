@@ -113,6 +113,35 @@ const migrations = [
     `,
     down: `SELECT 1;`,
   },
+  {
+    id: '008_settings_and_tokens',
+    up: `
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS copy_delay_ms INTEGER DEFAULT 0;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS latency_jitter_ms INTEGER DEFAULT 0;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS token_refresh_min INTEGER DEFAULT 85;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS ws_heartbeat_sec DECIMAL(4,1) DEFAULT 2.5;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS max_reconnects INTEGER DEFAULT 20;
+      
+      CREATE TABLE IF NOT EXISTS broker_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
+        platform VARCHAR(50) NOT NULL,
+        access_token TEXT,
+        refresh_token TEXT,
+        expires_at TIMESTAMPTZ,
+        last_refreshed_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(account_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_broker_tokens_expires ON broker_tokens(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_broker_tokens_account ON broker_tokens(account_id);
+    `,
+    down: `
+      ALTER TABLE risk_rules DROP COLUMN IF EXISTS copy_delay_ms;
+      ALTER TABLE risk_rules DROP COLUMN IF EXISTS latency_jitter_ms;
+      DROP TABLE IF EXISTS broker_tokens;
+    `,
+  },
 ];
 
 export async function runMigrations(pool) {

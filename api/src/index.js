@@ -23,6 +23,8 @@ import notificationRoutes from './routes/notifications.js';
 import signalRoutes from './routes/signals.js';
 import { listenerManager } from './services/listener-manager.js';
 import { copyEngine } from './services/copy-engine.js';
+import { initRedis, startWorker, shutdownQueue, getQueueStats } from './services/copy-queue.js';
+import { startTokenRefreshLoop, stopTokenRefreshLoop } from './services/token-refresh.js';
 
 const app = express();
 
@@ -69,10 +71,11 @@ app.get('/api/health', async (req, res) => {
     const dbCheck = await pool.query('SELECT 1');
     const listenerStatus = listenerManager?.getStatus?.() || { activeSessions: 0 };
     const copyStats = copyEngine?.getStats?.() || {};
+    const queueStats = await getQueueStats().catch(() => ({ mode: 'inline' }));
     res.json({
       status: 'healthy',
       ts: new Date().toISOString(),
-      v: '1.0.0',
+      v: '1.1.0',
       db: 'connected',
       listeners: listenerStatus,
       copyEngine: {
@@ -80,6 +83,7 @@ app.get('/api/health', async (req, res) => {
         totalFills: copyStats.totalFills || 0,
         cachedClients: copyStats.cachedClients || 0,
       },
+      queue: queueStats,
       uptime: Math.floor(process.uptime()),
       memory: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
     });
@@ -134,6 +138,15 @@ async function start() {
     console.log(`[API] Tradevanish API listening on port ${port}`);
     console.log(`[API] Env: ${config.nodeEnv} | CORS: ${config.cors.origin}`);
   });
+
+  // ── Initialize Redis Queue (optional, degrades gracefully) ───────────────
+  const redisReady = initRedis();
+  if (redisReady) {
+    startWorker(copyEngine);
+  }
+
+  // ── Start Tradovate Token Refresh Loop ───────────────────────────────────
+  startTokenRefreshLoop();
 
   // ── Restore active listeners from DB on startup ──────────────────────────
   // If the server restarted, reconnect any listeners that were running
@@ -192,6 +205,10 @@ async function start() {
       await pool.end();
       console.log('[API] Database pool closed');
     } catch {}
+
+    // Stop token refresh and queue
+    stopTokenRefreshLoop();
+    await shutdownQueue().catch(() => {});
 
     setTimeout(() => process.exit(0), 10000);
   }

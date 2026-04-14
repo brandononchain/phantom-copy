@@ -1355,15 +1355,20 @@ function SettingsPage({ accounts }) {
 
   const [saved, setSaved] = useState(false);
 
-  // Load risk rules from DB on mount
+  // Load ALL settings from DB on mount
   useEffect(() => {
     apiFetch("/api/settings/risk").then(r => r.ok ? r.json() : null).then(data => {
       if (data?.rules) {
-        if (data.rules.max_qty) setGlobalMaxQty(data.rules.max_qty);
-        if (data.rules.daily_loss_limit) setGlobalDailyLoss(Number(data.rules.daily_loss_limit));
-        if (data.rules.max_trades_per_day) setGlobalMaxTrades(data.rules.max_trades_per_day);
-        if (data.rules.trailing_drawdown) setGlobalTrailingDD(Number(data.rules.trailing_drawdown));
-        if (data.rules.kill_switch != null) setKillSwitchActive(data.rules.kill_switch);
+        const r = data.rules;
+        if (r.max_qty) setGlobalMaxQty(r.max_qty);
+        if (r.daily_loss_limit) setGlobalDailyLoss(Number(r.daily_loss_limit));
+        if (r.max_trades_per_day) setGlobalMaxTrades(r.max_trades_per_day);
+        if (r.trailing_drawdown) setGlobalTrailingDD(Number(r.trailing_drawdown));
+        if (r.kill_switch != null) setKillSwitchActive(r.kill_switch);
+        if (r.copy_delay_ms != null) setCopyDelay(r.copy_delay_ms);
+        if (r.token_refresh_min) setTokenRefreshMin(r.token_refresh_min);
+        if (r.ws_heartbeat_sec) setWsHeartbeatSec(Number(r.ws_heartbeat_sec));
+        if (r.max_reconnects) setMaxReconnects(r.max_reconnects);
       }
     }).catch(() => {});
 
@@ -1385,7 +1390,7 @@ function SettingsPage({ accounts }) {
 
   const handleSave = async () => {
     try {
-      // Save risk rules
+      // Save ALL settings (risk rules + connection config)
       const r = await apiFetch("/api/settings/risk", {
         method: "PUT",
         body: JSON.stringify({
@@ -1394,9 +1399,13 @@ function SettingsPage({ accounts }) {
           max_trades_per_day: globalMaxTrades,
           trailing_drawdown: globalTrailingDD,
           kill_switch: killSwitchActive,
+          copy_delay_ms: copyDelay,
+          token_refresh_min: tokenRefreshMin,
+          ws_heartbeat_sec: wsHeartbeatSec,
+          max_reconnects: maxReconnects,
         }),
       });
-      if (!r.ok) throw new Error("Risk rules save failed");
+      if (!r.ok) throw new Error("Settings save failed");
 
       // Save follower overrides
       const overridePromises = Object.entries(followerOverrides).map(([accountId, ov]) =>

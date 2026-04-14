@@ -29,7 +29,27 @@ export class CopyEngine extends EventEmitter {
 
     // Wire up the copy signal from this listener
     listener.on('copy-signal', async (signal) => {
-      await this.handleCopySignal(signal, masterId);
+      // Apply copy delay from user's risk rules
+      const delayResult = await query(
+        'SELECT copy_delay_ms, latency_jitter_ms FROM risk_rules WHERE user_id = (SELECT user_id FROM accounts WHERE id = $1)',
+        [masterId]
+      ).catch(() => ({ rows: [] }));
+      const rules = delayResult.rows[0] || {};
+      const baseDelay = parseInt(rules.copy_delay_ms) || 0;
+      const jitter = parseInt(rules.latency_jitter_ms) || 0;
+      const totalDelay = baseDelay + (jitter > 0 ? Math.floor(Math.random() * jitter) : 0);
+
+      if (totalDelay > 0) {
+        await new Promise(resolve => setTimeout(resolve, totalDelay));
+      }
+
+      // Try queue first, fall back to inline
+      try {
+        const { enqueueCopySignal } = await import('./copy-queue.js');
+        await enqueueCopySignal(signal, masterId, this);
+      } catch {
+        await this.handleCopySignal(signal, masterId);
+      }
     });
 
     listener.on('bracket-signal', async (signal) => {
