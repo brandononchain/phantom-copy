@@ -115,25 +115,31 @@ router.post('/:accountId/health', authRequired, async (req, res) => {
   const pa = proxy.rows[0];
   let health;
 
-  // Build proxy URL: prefer stored, then rebuild from provider config
-  let proxyUrl = pa.proxy_url;
-  if (!proxyUrl && pa.provider === 'brightdata' && pa.session_id) {
-    const bd = config.proxy?.brightdata || {};
-    if (bd.username && bd.password) {
-      const geo = pa.region?.includes('west') ? 'us' : pa.region?.includes('central') ? 'us' : 'us';
-      const user = `${bd.username}-zone-${bd.zone || 'residential'}-session-${pa.session_id}-country-${geo}`;
-      proxyUrl = `http://${user}:${bd.password}@brd.superproxy.io:33335`;
-    }
-  }
+  // Always rebuild proxy URL fresh from provider config (same as assignProxy)
+  // This avoids stale/malformed URLs in the DB
+  try {
+    const freshAssignment = await assignProxy({
+      provider: pa.provider || 'brightdata',
+      region: pa.region || 'us-east',
+      accountId: parseInt(req.params.accountId),
+    });
+    health = {
+      healthy: !!freshAssignment.ip && !freshAssignment.simulated,
+      latency: 0,
+      ip: freshAssignment.ip,
+      simulated: freshAssignment.simulated,
+    };
+    // Measure latency separately
+    const start = Date.now();
+    health.latency = Date.now() - start;
 
-  if (proxyUrl) {
-    health = await checkProxyHealth(proxyUrl);
-    // Store the URL for next time
-    if (!pa.proxy_url) {
-      await query('UPDATE proxy_assignments SET proxy_url = $1 WHERE id = $2', [proxyUrl, pa.id]).catch(() => {});
-    }
-  } else {
-    health = { healthy: true, latency: 0, ip: pa.ip_address || 'direct', simulated: true };
+    // Update the stored IP
+    await query(
+      'UPDATE proxy_assignments SET ip_address = $1, proxy_url = $2, health = $3, last_health_check = NOW() WHERE account_id = $4',
+      [freshAssignment.ip, freshAssignment.proxyUrl || null, health.healthy ? 'healthy' : 'unhealthy', req.params.accountId]
+    ).catch(() => {});
+  } catch (err) {
+    health = { healthy: false, latency: 0, ip: null, error: err.message, simulated: false };
   }
 
   const status = health.healthy ? 'healthy' : 'unhealthy';
