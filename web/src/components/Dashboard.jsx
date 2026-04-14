@@ -1612,8 +1612,12 @@ function SettingsPage({ accounts }) {
 
       {/* ── PER-FOLLOWER OVERRIDES ──────────────── */}
       <div className="card-sh"><div className="card-in">
-        <div className="card-hd"><h2 className="card-t">Per-Follower Overrides</h2><span className="badge">{followers.length} FOLLOWERS</span></div>
+        <div className="card-hd"><h2 className="card-t">Per-Follower Overrides</h2><span className="badge">{followers.length} FOLLOWERS</span>{currentPlan === "basic" && <span className="badge" style={{ background: "rgba(99,102,241,0.1)", color: "#6366f1", borderColor: "rgba(99,102,241,0.2)", marginLeft: 8 }}>PRO</span>}</div>
         <div className="set-section">
+          {currentPlan === "basic" ? (
+            <p className="set-help" style={{ marginBottom: 16 }}>Per-follower overrides require a Pro or Pro+ plan. <a href="#" onClick={e => { e.preventDefault(); onNav && onNav("profile"); }} style={{ color: "#6366f1", textDecoration: "none" }}>Upgrade your plan</a> to customize risk rules per account.</p>
+          ) : (
+          <>
           <p className="set-help" style={{ marginBottom: 16 }}>Override global risk rules for individual accounts. Accounts without overrides inherit global settings.</p>
           {followers.length > 0 ? (
             <div className="set-follower-list">
@@ -1667,6 +1671,8 @@ function SettingsPage({ accounts }) {
             </div>
           ) : (
             <div className="acct-empty"><p>No follower accounts connected.</p></div>
+          )}
+          </>
           )}
         </div>
       </div></div>

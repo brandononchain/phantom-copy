@@ -101,9 +101,9 @@ export class CopyEngine extends EventEmitter {
       );
       const executionId = execResult.rows[0].id;
 
-      // 3. Find all follower accounts for this user on the same platform
-      //    AND fetch risk rules + overrides in ONE query batch (latency optimization)
-      const [followers, riskResult, overridesResult, dailyStats] = await Promise.all([
+      // 3. Find all follower accounts for this user
+      //    AND fetch risk rules + overrides + user plan in ONE query batch
+      const [followers, riskResult, overridesResult, dailyStats, userResult] = await Promise.all([
         query(
           `SELECT a.*, pa.ip_address, pa.provider, pa.session_id AS proxy_session
            FROM accounts a
@@ -118,9 +118,18 @@ export class CopyEngine extends EventEmitter {
            FROM copy_executions WHERE user_id = $1 AND timestamp >= CURRENT_DATE`,
           [master.user_id]
         ),
+        query('SELECT plan FROM users WHERE id = $1', [master.user_id]),
       ]);
 
-      if (followers.rows.length === 0) {
+      // Enforce follower limit by plan
+      const userPlan = userResult.rows[0]?.plan || 'basic';
+      let activeFollowers = followers.rows;
+      if (userPlan === 'basic' && activeFollowers.length > 5) {
+        activeFollowers = activeFollowers.slice(0, 5);
+        console.log(`[COPY-ENGINE] Basic plan: capping to 5 followers (${followers.rows.length} connected)`);
+      }
+
+      if (activeFollowers.length === 0) {
         console.log(`[COPY-ENGINE] No followers to replicate to for master ${masterId}`);
         return;
       }
@@ -153,7 +162,7 @@ export class CopyEngine extends EventEmitter {
 
       // 5. Execute on each follower (parallel)
       const results = await Promise.allSettled(
-        followers.rows.map(follower => this.executeOnFollower({
+        activeFollowers.map(follower => this.executeOnFollower({
           follower,
           signal,
           executionId,
@@ -171,7 +180,7 @@ export class CopyEngine extends EventEmitter {
       this.stats.totalErrors += failed;
 
       const latency = Date.now() - startTime;
-      console.log(`[COPY-ENGINE] ${signal.action} replicated: ${filled}/${followers.rows.length} fills, ${latency}ms total`);
+      console.log(`[COPY-ENGINE] ${signal.action} replicated: ${filled}/${activeFollowers.length} fills, ${latency}ms total`);
 
       // 7. Emit webhook events
       this.emit('execution-complete', {
@@ -179,7 +188,7 @@ export class CopyEngine extends EventEmitter {
         signal,
         filled,
         failed,
-        total: followers.rows.length,
+        total: activeFollowers.length,
         latencyMs: latency,
       });
 
@@ -193,7 +202,7 @@ export class CopyEngine extends EventEmitter {
       if (failed > 0) {
         deliverWebhook(master.user_id, 'trade.failed', {
           ticker: signal.contractId, side: signal.side, qty: signal.qty,
-          failedCount: failed, totalFollowers: followers.rows.length,
+          failedCount: failed, totalFollowers: activeFollowers.length,
         }).catch(() => {});
       }
 

@@ -120,6 +120,17 @@ router.get('/overrides', authRequired, async (req, res) => {
 router.put('/overrides/:accountId', authRequired, async (req, res) => {
   const { max_qty, daily_loss_limit, size_multiplier } = req.body;
 
+  // Plan check: overrides require Pro or Pro+
+  const userPlan = await query('SELECT plan FROM users WHERE id = $1', [req.user.id]);
+  const plan = userPlan.rows[0]?.plan || 'basic';
+  if (plan === 'basic') {
+    return res.status(403).json({
+      error: 'plan_required',
+      message: 'Per-follower overrides require Pro or Pro+ plan. Current plan: basic',
+      upgrade_url: '/api/billing/plans',
+    });
+  }
+
   try {
     const result = await query(
       `INSERT INTO follower_overrides (user_id, account_id, max_qty, daily_loss_limit, size_multiplier)

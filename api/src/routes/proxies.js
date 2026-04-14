@@ -22,6 +22,19 @@ router.post('/assign', authRequired, async (req, res) => {
   const { accountId, provider = 'brightdata', region = 'us-east' } = req.body;
   if (!accountId) return res.status(400).json({ error: 'accountId required' });
 
+  // Plan check: basic can only use brightdata
+  const userPlan = await query('SELECT plan FROM users WHERE id = $1', [req.user.id]);
+  const plan = userPlan.rows[0]?.plan || 'basic';
+  const allowedProviders = plan === 'basic' ? ['brightdata'] : ['brightdata', 'oxylabs', 'smartproxy', 'iproyal'];
+
+  if (!allowedProviders.includes(provider)) {
+    return res.status(403).json({
+      error: 'provider_restricted',
+      message: `${provider} requires Pro or Pro+ plan. Basic plan supports BrightData only.`,
+      allowed: allowedProviders,
+    });
+  }
+
   const acct = await query('SELECT * FROM accounts WHERE id = $1 AND user_id = $2', [accountId, req.user.id]);
   if (acct.rows.length === 0) return res.status(404).json({ error: 'Account not found' });
 
