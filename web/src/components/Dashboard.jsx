@@ -2712,12 +2712,17 @@ function AuthScreen({ onAuth, initialMode }) {
     setLoading(true); setError(null);
 
     try {
+      // Trim inputs to handle browser autofill whitespace
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password;
+      const cleanName = name?.trim();
+
       const endpoint = mode === "login" || mode === "2fa" ? "/api/auth/login" : "/api/auth/register";
       const body = mode === "register" 
-        ? { email, password, name } 
+        ? { email: cleanEmail, password: cleanPassword, name: cleanName } 
         : mode === "2fa"
-        ? { email, password, totp_code: totpCode }
-        : { email, password };
+        ? { email: cleanEmail, password: cleanPassword, totp_code: totpCode }
+        : { email: cleanEmail, password: cleanPassword };
       const res = await apiFetch(endpoint, {
         method: "POST", body: JSON.stringify(body),
       });
@@ -2779,17 +2784,17 @@ function AuthScreen({ onAuth, initialMode }) {
             )}
 
             {(mode === "login" || mode === "register" || mode === "forgot" || mode === "reset") && (
-              <div className="set-field"><label className="set-label">EMAIL</label><input type="email" className="set-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
+              <div className="set-field"><label className="set-label">EMAIL</label><input type="email" className="set-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} autoComplete={mode === "register" ? "email" : "username"} /></div>
             )}
 
             {(mode === "login" || mode === "register") && (
-              <div className="set-field"><label className="set-label">PASSWORD</label><input type="password" className="set-input" placeholder={mode === "register" ? "Create a password" : "Your password"} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
+              <div className="set-field"><label className="set-label">PASSWORD</label><input key={`pwd-${mode}`} type="password" className="set-input" placeholder={mode === "register" ? "Create a password" : "Your password"} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} autoComplete={mode === "register" ? "new-password" : "current-password"} /></div>
             )}
 
             {mode === "reset" && (
               <>
-                <div className="set-field"><label className="set-label">RESET CODE</label><input type="text" className="set-input" placeholder="6-digit code from your email" value={resetCode} onChange={e => setResetCode(e.target.value)} style={{ fontFamily: "var(--mono)", fontSize: 16, letterSpacing: "3px", textAlign: "center" }} maxLength={6} /></div>
-                <div className="set-field"><label className="set-label">NEW PASSWORD</label><input type="password" className="set-input" placeholder="Create a new password" value={newPassword} onChange={e => setNewPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} /></div>
+                <div className="set-field"><label className="set-label">RESET CODE</label><input type="text" className="set-input" placeholder="6-digit code from your email" value={resetCode} onChange={e => setResetCode(e.target.value)} style={{ fontFamily: "var(--mono)", fontSize: 16, letterSpacing: "3px", textAlign: "center" }} maxLength={6} autoComplete="one-time-code" /></div>
+                <div className="set-field"><label className="set-label">NEW PASSWORD</label><input type="password" className="set-input" placeholder="Create a new password" value={newPassword} onChange={e => setNewPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} autoComplete="new-password" /></div>
               </>
             )}
 
