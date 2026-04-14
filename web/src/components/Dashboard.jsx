@@ -337,10 +337,41 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
   const [launchStageIdx, setLaunchStageIdx] = useState(0);
   const [launchLog, setLaunchLog] = useState([]);
   const launchTimer = useRef(null);
-  const assignedIP = useRef(`${Math.floor(Math.random()*200+20)}.${Math.floor(Math.random()*200+20)}.${Math.floor(Math.random()*200+20)}.${Math.floor(Math.random()*90+10)}`);
+  const [assignedIP, setAssignedIP] = useState(null);
+  const [ipLoading, setIpLoading] = useState(false);
 
   // Real broker accounts fetched after auth
   const [brokerAccounts, setBrokerAccounts] = useState([]);
+
+  // Fetch real proxy IP when entering proxy step or changing region/provider
+  const fetchRealIP = useCallback(async () => {
+    setIpLoading(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("tv_token") : null;
+      if (!token) { setAssignedIP("Authenticating..."); setIpLoading(false); return; }
+      const res = await fetch("/api/proxies/test-ip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          provider: proxyProvider.toLowerCase().replace(/\s/g, ""),
+          region: proxyRegion.toLowerCase().replace(/\s/g, "-"),
+        }),
+      });
+      const data = await res.json();
+      if (data.ip) {
+        setAssignedIP(data.ip);
+      } else {
+        setAssignedIP(data.error || "Failed to resolve");
+      }
+    } catch (err) {
+      setAssignedIP("Connection error");
+    }
+    setIpLoading(false);
+  }, [proxyProvider, proxyRegion]);
+
+  useEffect(() => {
+    if (step === "proxy") fetchRealIP();
+  }, [step, proxyProvider, proxyRegion, fetchRealIP]);
 
   // If we have an OAuth resume token, fetch accounts immediately
   useEffect(() => {
@@ -382,7 +413,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
 
   const isTopStepX = platform?.id === "topstepx";
   const LAUNCH_LOGS = isTopStepX ? [
-    { t: "00.000", msg: `Proxy tunnel established via ${assignedIP.current}`, type: "sys" },
+    { t: "00.000", msg: `Proxy tunnel established via ${assignedIP}`, type: "sys" },
     { t: "00.280", msg: "SignalR negotiation skipped (direct WebSocket)", type: "sys" },
     { t: "00.310", msg: "User Hub connected (SignalR)", type: "ws" },
     { t: "00.340", msg: "JWT token validated by ProjectX Gateway", type: "ws" },
@@ -396,7 +427,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
     { t: "00.612", msg: "Token refresh scheduled (23h)", type: "sys" },
     { t: "00.614", msg: "Master listener ready. Watching for trades.", type: "ready" },
   ] : [
-    { t: "00.000", msg: `Proxy tunnel established via ${assignedIP.current}`, type: "sys" },
+    { t: "00.000", msg: `Proxy tunnel established via ${assignedIP}`, type: "sys" },
     { t: "00.340", msg: "WebSocket connection opened", type: "sys" },
     { t: "00.412", msg: "authorize frame sent with OAuth token", type: "ws" },
     { t: "00.445", msg: "Authorization confirmed (userId: 88412)", type: "ws" },
@@ -537,7 +568,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
         id: saveData.account?.id || `acc_${Date.now()}`,
         label: label || `${platform.name} ${selectedBrokerAccount?.name || 'Account'}`,
         platform: platform.name, role,
-        ip: assignedIP.current.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.current.split(".").pop()),
+        ip: assignedIP && assignedIP.includes(".") ? assignedIP.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.split(".").pop()) : assignedIP,
         proxy: proxyProvider, region: proxyRegion, status: role === "master" ? "copying" : "connected",
         pnl: 0, trades: 0, latency: Math.floor(Math.random() * 30 + 5),
         brokerAccountId: selectedBrokerAccount?.id || null,
@@ -618,7 +649,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
         id: savedId || Date.now(),
         label: label || `${platform.name} Follower`,
         platform: platform.name, role: 'follower',
-        ip: assignedIP.current?.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.current?.split(".").pop()) || null,
+        ip: assignedIP?.replace(/\.\d+\.\d+$/, ".xx." + assignedIP?.split(".").pop()) || null,
         proxy: proxyProvider, region: proxyRegion, status: "connected", pnl: 0, trades: 0,
         latency: Math.floor(Math.random() * 40 + 8),
         brokerAccountId: selectedBrokerAccount?.id || null,
@@ -800,7 +831,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                 <div className="pa-section"><label className="pa-label">PROXY PROVIDER</label><div className="pa-options">{PROXY_PROVIDERS.map(p => (<button key={p} className={cn("pa-opt", proxyProvider === p && "pa-opt-on")} onClick={() => setProxyProvider(p)}>{p}</button>))}</div></div>
                 <div className="pa-section"><label className="pa-label">IP REGION</label><div className="pa-options">{["US-East", "US-West", "US-Central", "EU-West", "EU-Central"].map(r => (<button key={r} className={cn("pa-opt", proxyRegion === r && "pa-opt-on")} onClick={() => setProxyRegion(r)}>{r}</button>))}</div></div>
                 <div className="pa-preview">
-                  <div className="pa-pv-row"><span className="pa-pv-label">Assigned IP</span><span className="pa-pv-val ip-glow">{assignedIP.current}</span></div>
+                  <div className="pa-pv-row"><span className="pa-pv-label">Assigned IP</span><span className="pa-pv-val ip-glow">{ipLoading ? <span style={{ opacity: 0.4 }}>Resolving...</span> : assignedIP || "Pending"}</span></div>
                   <div className="pa-pv-row"><span className="pa-pv-label">Proxy Type</span><span className="pa-pv-val">Residential Sticky Session</span></div>
                   <div className="pa-pv-row"><span className="pa-pv-label">Rotation</span><span className="pa-pv-val">Manual (on demand)</span></div>
                 </div>
@@ -855,7 +886,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                     <div className="sa-confirm-grid">
                       <div className="sa-confirm-item"><span className="sa-ci-label">MASTER ACCOUNT</span><span className="sa-ci-val">{label || platform?.name} ({selectedBrokerAccount.name})</span></div>
                       <div className="sa-confirm-item"><span className="sa-ci-label">PLATFORM</span><span className="sa-ci-val">{platform?.name}</span></div>
-                      <div className="sa-confirm-item"><span className="sa-ci-label">PROXY IP</span><span className="sa-ci-val ip-glow">{assignedIP.current}</span></div>
+                      <div className="sa-confirm-item"><span className="sa-ci-label">PROXY IP</span><span className="sa-ci-val ip-glow">{assignedIP}</span></div>
                       <div className="sa-confirm-item"><span className="sa-ci-label">PROVIDER</span><span className="sa-ci-val">{proxyProvider} ({proxyRegion})</span></div>
                     </div>
                     <div className="sa-what-happens">
@@ -938,7 +969,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                     </div>
                     <div className="launch-ready-text">
                       <div className="launch-ready-title">Master Listener Active</div>
-                      <div className="launch-ready-sub">Watching {selectedBrokerAccount?.name || label} via {assignedIP.current}</div>
+                      <div className="launch-ready-sub">Watching {selectedBrokerAccount?.name || label} via {assignedIP}</div>
                     </div>
                     <button className="btn-primary" onClick={handleFinish}>
                       <span>Go to Dashboard</span>
