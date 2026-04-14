@@ -97,6 +97,22 @@ const migrations = [
       ALTER TABLE users DROP COLUMN IF EXISTS totp_enabled;
     `,
   },
+  {
+    id: '007_scalability',
+    up: `
+      CREATE INDEX IF NOT EXISTS idx_proxy_assignments_account ON proxy_assignments(account_id);
+      CREATE INDEX IF NOT EXISTS idx_proxy_assignments_user ON proxy_assignments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_webhooks_user ON webhooks(user_id);
+      CREATE INDEX IF NOT EXISTS idx_listener_sessions_user ON listener_sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_listener_sessions_account ON listener_sessions(account_id);
+      CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+      CREATE INDEX IF NOT EXISTS idx_risk_rules_user ON risk_rules(user_id);
+      CREATE INDEX IF NOT EXISTS idx_follower_overrides_user ON follower_overrides(user_id);
+      CREATE INDEX IF NOT EXISTS idx_copy_executions_date ON copy_executions(user_id, timestamp);
+      CREATE INDEX IF NOT EXISTS idx_copy_fills_status ON copy_fills(status);
+    `,
+    down: `SELECT 1;`,
+  },
 ];
 
 export async function runMigrations(pool) {

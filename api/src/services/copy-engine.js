@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 import { query } from '../db/pool.js';
 import { ProjectXCopyClient } from '../listeners/projectx-listener.js';
 import { createProxyAgent } from './proxy-provider.js';
+import { deliverWebhook } from './webhook-delivery.js';
 
 export class CopyEngine extends EventEmitter {
   constructor() {
@@ -16,6 +17,9 @@ export class CopyEngine extends EventEmitter {
     this.activeListeners = new Map(); // sessionId -> listener instance
     this.followerClients = new Map(); // accountId -> CopyClient
     this.stats = { totalSignals: 0, totalFills: 0, totalErrors: 0 };
+    
+    // Periodic client cache cleanup every 10 minutes
+    setInterval(() => this.cleanupStaleClients(), 10 * 60 * 1000);
   }
 
   // ── Register a master listener ─────────────────────────────────────────
@@ -158,6 +162,20 @@ export class CopyEngine extends EventEmitter {
         total: followers.rows.length,
         latencyMs: latency,
       });
+
+      // 8. Deliver webhooks to user's endpoints
+      if (filled > 0) {
+        deliverWebhook(master.user_id, 'trade.executed', {
+          ticker: signal.contractId, side: signal.side, qty: signal.qty,
+          price: signal.price, followerCount: filled, latencyMs: latency,
+        }).catch(() => {});
+      }
+      if (failed > 0) {
+        deliverWebhook(master.user_id, 'trade.failed', {
+          ticker: signal.contractId, side: signal.side, qty: signal.qty,
+          failedCount: failed, totalFollowers: followers.rows.length,
+        }).catch(() => {});
+      }
 
     } catch (err) {
       this.stats.totalErrors++;
@@ -360,6 +378,27 @@ export class CopyEngine extends EventEmitter {
 
   invalidateClient(accountId) {
     this.followerClients.delete(accountId);
+  }
+
+  // ── Client Cache Cleanup (prevents memory leak at scale) ────────────────
+
+  cleanupStaleClients() {
+    // Remove clients for accounts that are no longer connected
+    const activeAccountIds = new Set();
+    for (const [, session] of this.activeListeners) {
+      activeAccountIds.add(session.masterId);
+    }
+    
+    let cleaned = 0;
+    for (const [accountId] of this.followerClients) {
+      // Keep clients that were used recently (rely on invalidateClient for explicit removal)
+      // But cap total cached clients at 500 to prevent unbounded growth
+      if (this.followerClients.size > 500) {
+        this.followerClients.delete(accountId);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) console.log(`[COPY-ENGINE] Cleaned ${cleaned} stale clients`);
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────

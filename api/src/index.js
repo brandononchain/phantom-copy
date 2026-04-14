@@ -55,7 +55,7 @@ app.use(express.json({ limit: '10mb' }));
 // Rate limiting
 app.use('/api/', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: config.isDev ? 1000 : 200,
+  max: config.isDev ? 1000 : 600,
   standardHeaders: true,
   legacyHeaders: false,
 }));
@@ -64,8 +64,23 @@ app.use('/api/', rateLimit({
 
 app.get('/api/health', async (req, res) => {
   try {
-    await pool.query('SELECT 1');
-    res.json({ status: 'healthy', ts: new Date().toISOString(), v: '1.0.0' });
+    const dbCheck = await pool.query('SELECT 1');
+    const listenerStatus = listenerManager?.getActiveSessions?.() || [];
+    const copyStats = copyEngine?.getStats?.() || {};
+    res.json({
+      status: 'healthy',
+      ts: new Date().toISOString(),
+      v: '1.0.0',
+      db: 'connected',
+      activeListeners: listenerStatus.length,
+      copyEngine: {
+        totalSignals: copyStats.totalSignals || 0,
+        totalFills: copyStats.totalFills || 0,
+        cachedClients: copyStats.cachedClients || 0,
+      },
+      uptime: Math.floor(process.uptime()),
+      memory: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+    });
   } catch (err) {
     res.status(503).json({ status: 'unhealthy', error: err.message });
   }
