@@ -572,19 +572,63 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
     }
   };
 
-  const handleProxyDone = () => {
+  const handleProxyDone = async () => {
     if (role === "master") {
       setStep("select_account");
     } else {
-      // Followers just finish
-      const acc = {
-        id: `acc_${Date.now()}`, label: label || `${platform.name} Account`, platform: platform.name, role,
-        ip: assignedIP.current.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.current.split(".").pop()),
-        proxy: proxyProvider, region: proxyRegion, status: "connected", pnl: 0, trades: 0,
-        latency: Math.floor(Math.random() * 40 + 8),
-      };
-      onConnect(acc);
-      onClose();
+      // Save follower account to DB
+      try {
+        setLaunchPhase("saving");
+        setStep("launch");
+
+        const saveRes = await apiFetch('/api/accounts', {
+          method: 'POST',
+          body: JSON.stringify({
+            platform: platform.id,
+            role: 'follower',
+            brokerAccountId: selectedBrokerAccount?.id || null,
+            label: label || `${platform.name} Follower`,
+            credentials: JSON.stringify({
+              token: brokerToken,
+              username: brokerUsername,
+              brokerAccountId: selectedBrokerAccount?.id,
+            }),
+          }),
+        });
+        const saveData = await saveRes.json();
+        if (!saveRes.ok) throw new Error(saveData.message || saveData.error);
+
+        const acc = {
+          id: saveData.account?.id || `acc_${Date.now()}`,
+          label: label || `${platform.name} Follower`,
+          platform: platform.name, role: 'follower',
+          ip: assignedIP.current.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.current.split(".").pop()),
+          proxy: proxyProvider, region: proxyRegion, status: "connected", pnl: 0, trades: 0,
+          latency: Math.floor(Math.random() * 40 + 8),
+          brokerAccountId: selectedBrokerAccount?.id || null,
+        };
+        onConnect(acc);
+
+        // Assign proxy
+        if (saveData.account?.id) {
+          apiFetch('/api/proxies/assign', {
+            method: 'POST',
+            body: JSON.stringify({
+              accountId: saveData.account.id,
+              provider: proxyProvider.toLowerCase().replace(/\s/g, ''),
+              region: proxyRegion.toLowerCase().replace(/\s/g, '-'),
+            }),
+          }).catch(() => {});
+        }
+
+        // Show success state
+        setLaunchPhase("complete");
+        setTimeout(() => onClose(), 1500);
+      } catch (err) {
+        setAuthError(`Failed to save account: ${err.message}`);
+        setLaunchPhase(null);
+        setStep("proxy");
+      }
     }
   };
 
@@ -794,7 +838,9 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
           {step === "launch" && (
             <div className="modal-body">
               <div className="launch-panel fade-in">
-                {/* Boot Stages */}
+                {/* Master: full boot sequence */}
+                {role === "master" && launchPhase !== "saving" && launchPhase !== "complete" && (
+                  <>
                 <div className="launch-stages">
                   {LAUNCH_STAGES.map((stage, i) => {
                     const done = i < launchStageIdx;
@@ -821,7 +867,6 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                   })}
                 </div>
 
-                {/* Live Boot Log */}
                 <div className="launch-log">
                   <div className="launch-log-header">
                     <span className="launch-log-title">Connection Log</span>
@@ -842,7 +887,6 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                   </div>
                 </div>
 
-                {/* Ready State */}
                 {launchPhase === "ready" && (
                   <div className="launch-ready fade-in">
                     <div className="launch-ready-icon">
@@ -857,6 +901,8 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                       <span className="btn-aw"><span className="btn-ar">&#8594;</span></span>
                     </button>
                   </div>
+                )}
+                  </>
                 )}
 
                 {/* Saving State */}
