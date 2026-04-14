@@ -578,59 +578,79 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
   const handleProxyDone = async () => {
     if (role === "master") {
       setStep("select_account");
-    } else {
-      // Save follower to DB with success UX inline
-      try {
-        setFollowerSaving(true);
-        setAuthError(null);
+      return;
+    }
 
-        const saveRes = await apiFetch('/api/accounts', {
-          method: 'POST',
-          body: JSON.stringify({
-            platform: platform.id,
-            role: 'follower',
-            brokerAccountId: selectedBrokerAccount?.id || null,
-            label: label || `${platform.name} Follower`,
-            credentials: JSON.stringify({
-              token: brokerToken,
-              username: brokerUsername,
-              brokerAccountId: selectedBrokerAccount?.id,
-            }),
-          }),
-        });
-        const saveData = await saveRes.json();
-        if (!saveRes.ok) throw new Error(saveData.message || saveData.error);
+    // Follower flow: save to DB, assign proxy, show success
+    setFollowerSaving(true);
+    setFollowerComplete(false);
+    setAuthError(null);
 
-        const acc = {
-          id: saveData.account?.id || `acc_${Date.now()}`,
-          label: label || `${platform.name} Follower`,
-          platform: platform.name, role: 'follower',
-          ip: assignedIP.current.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.current.split(".").pop()),
-          proxy: proxyProvider, region: proxyRegion, status: "connected", pnl: 0, trades: 0,
-          latency: Math.floor(Math.random() * 40 + 8),
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("tv_token") : null;
+      if (!token) throw new Error("Session expired. Please sign in again.");
+
+      const saveRes = await fetch('/api/accounts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          platform: platform.id,
+          role: 'follower',
           brokerAccountId: selectedBrokerAccount?.id || null,
-        };
+          label: label || `${platform.name} Follower`,
+          credentials: JSON.stringify({
+            token: brokerToken,
+            username: brokerUsername,
+            brokerAccountId: selectedBrokerAccount?.id,
+          }),
+        }),
+      });
 
-        // Assign proxy
-        if (saveData.account?.id) {
-          apiFetch('/api/proxies/assign', {
-            method: 'POST',
-            body: JSON.stringify({
-              accountId: saveData.account.id,
-              provider: proxyProvider.toLowerCase().replace(/\s/g, ''),
-              region: proxyRegion.toLowerCase().replace(/\s/g, '-'),
-            }),
-          }).catch(() => {});
-        }
+      const saveData = await saveRes.json();
+      if (!saveRes.ok) throw new Error(saveData.error || saveData.message || "Save failed");
 
-        setFollowerSaving(false);
-        setFollowerComplete(true);
-        onConnect(acc);
-        setTimeout(() => onClose(), 1500);
-      } catch (err) {
-        setFollowerSaving(false);
-        setAuthError(`Failed to save: ${err.message}`);
+      const savedId = saveData.account?.id;
+
+      const acc = {
+        id: savedId || Date.now(),
+        label: label || `${platform.name} Follower`,
+        platform: platform.name, role: 'follower',
+        ip: assignedIP.current?.replace(/\.\d+\.\d+$/, ".xx." + assignedIP.current?.split(".").pop()) || null,
+        proxy: proxyProvider, region: proxyRegion, status: "connected", pnl: 0, trades: 0,
+        latency: Math.floor(Math.random() * 40 + 8),
+        brokerAccountId: selectedBrokerAccount?.id || null,
+      };
+
+      // Assign proxy (non-blocking)
+      if (savedId) {
+        fetch('/api/proxies/assign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({
+            accountId: savedId,
+            provider: proxyProvider.toLowerCase().replace(/\s/g, ''),
+            region: proxyRegion.toLowerCase().replace(/\s/g, '-'),
+          }),
+        }).catch(() => {});
       }
+
+      // Show success
+      setFollowerSaving(false);
+      setFollowerComplete(true);
+      onConnect(acc);
+
+      // Auto close after 1.5s
+      setTimeout(() => {
+        try { onClose(); } catch {}
+      }, 1500);
+
+    } catch (err) {
+      setFollowerSaving(false);
+      setFollowerComplete(false);
+      setAuthError(err.message || "Failed to save account");
     }
   };
 
@@ -3019,9 +3039,9 @@ export default function App({ initialMode }) {
     // Only show onboarding for brand new accounts (created within last 60 seconds)
     const isNewAccount = userData.created_at && (Date.now() - new Date(userData.created_at).getTime() < 60000);
     if (isNewAccount) setShowOnboarding(true);
-    // Navigate to /app if on sign-in or sign-up pages
+    // Navigate to /app if on sign-in or sign-up pages (without full reload)
     if (typeof window !== "undefined" && (window.location.pathname === "/sign-in" || window.location.pathname === "/sign-up")) {
-      window.location.href = "/app";
+      window.history.replaceState({}, "", "/app");
     }
   };
 
