@@ -313,7 +313,7 @@ export class CopyEngine extends EventEmitter {
         proxyAgent: agent,
       });
     } else if (follower.platform === 'tradovate' || follower.platform === 'ninjatrader') {
-      // Tradovate REST API client with proxy
+      // Tradovate REST API client with undici proxy
       client = {
         async placeOrder({ contractId, side, qty, orderType, limitPrice, stopPrice }) {
           const baseUrl = 'https://demo.tradovateapi.com/v1';
@@ -334,9 +334,10 @@ export class CopyEngine extends EventEmitter {
             headers: { 'Authorization': `Bearer ${creds.token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
           };
-          if (agent) fetchOpts.agent = agent;
+          if (agent) fetchOpts.dispatcher = agent;
 
-          const res = await fetch(`${baseUrl}/order/placeorder`, fetchOpts);
+          const { default: undici } = await import('undici');
+          const res = await undici.fetch(`${baseUrl}/order/placeorder`, fetchOpts);
           const data = await res.json();
           if (data.failureReason) throw new Error(data.failureReason);
           return { orderId: data.orderId, platform: 'tradovate' };

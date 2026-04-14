@@ -6,7 +6,7 @@
 // The proxy URL is used as an HttpsProxyAgent for all broker API calls.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { ProxyAgent } from 'undici';
 import { config } from '../config/index.js';
 
 // ── Region-to-country mapping ────────────────────────────────────────────────
@@ -134,15 +134,16 @@ export async function assignProxy({ provider = 'brightdata', region = 'us-east',
     };
   }
 
-  // Resolve actual external IP through the proxy
+  // Resolve actual external IP through the proxy using undici ProxyAgent
   let externalIp = null;
   try {
-    const agent = new HttpsProxyAgent(proxyConfig.url);
+    const dispatcher = new ProxyAgent(proxyConfig.url);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await fetch('https://api.ipify.org?format=json', {
-      agent,
+    const { default: undiciFetch } = await import('undici');
+    const res = await undiciFetch.fetch('https://api.ipify.org?format=json', {
+      dispatcher,
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -179,13 +180,9 @@ export function createProxyAgent(proxyAssignment) {
     return null; // No real proxy, direct connection
   }
 
-  if (proxyAssignment.proxyUrl) {
-    return new HttpsProxyAgent(proxyAssignment.proxyUrl);
-  }
-
-  // Rebuild from stored fields
-  const url = `http://${proxyAssignment.username}:${proxyAssignment.password}@${proxyAssignment.host}:${proxyAssignment.port}`;
-  return new HttpsProxyAgent(url);
+  const url = proxyAssignment.proxyUrl ||
+    `http://${proxyAssignment.username}:${proxyAssignment.password}@${proxyAssignment.host}:${proxyAssignment.port}`;
+  return new ProxyAgent(url);
 }
 
 /**
@@ -196,15 +193,16 @@ export async function checkProxyHealth(proxyUrl) {
     return { healthy: true, latency: 0, ip: 'direct', simulated: true };
   }
 
-  const agent = new HttpsProxyAgent(proxyUrl);
+  const dispatcher = new ProxyAgent(proxyUrl);
   const start = Date.now();
 
   try {
+    const { default: undici } = await import('undici');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await fetch('https://api.ipify.org?format=json', {
-      agent,
+    const res = await undici.fetch('https://api.ipify.org?format=json', {
+      dispatcher,
       signal: controller.signal,
     });
     clearTimeout(timeout);

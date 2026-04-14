@@ -142,6 +142,17 @@ const migrations = [
       DROP TABLE IF EXISTS broker_tokens;
     `,
   },
+  {
+    id: '009_proxy_credentials',
+    up: `
+      ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_url TEXT;
+      ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_username TEXT;
+      ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_password TEXT;
+      ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS host VARCHAR(255);
+      ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+    `,
+    down: `SELECT 1;`,
+  },
 ];
 
 export async function runMigrations(pool) {

@@ -42,12 +42,23 @@ router.post('/assign', authRequired, async (req, res) => {
     const assignment = await assignProxy({ provider, region, accountId });
 
     await query(
-      `INSERT INTO proxy_assignments (account_id, provider, region, ip_address, port, session_id, health, last_health_check)
-       VALUES ($1, $2, $3, $4, $5, $6, 'healthy', NOW())
+      `ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_url TEXT;
+       ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_username TEXT;
+       ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_password TEXT;
+       ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS host VARCHAR(255);
+       ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);`
+    ).catch(() => {});
+
+    await query(
+      `INSERT INTO proxy_assignments (account_id, user_id, provider, region, ip_address, port, session_id, host, proxy_url, proxy_username, proxy_password, health, last_health_check)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'healthy', NOW())
        ON CONFLICT (account_id) DO UPDATE SET
          provider=EXCLUDED.provider, region=EXCLUDED.region, ip_address=EXCLUDED.ip_address,
-         port=EXCLUDED.port, session_id=EXCLUDED.session_id, health='healthy', last_health_check=NOW()`,
-      [accountId, provider, region, assignment.ip, assignment.port, assignment.sessionId]
+         port=EXCLUDED.port, session_id=EXCLUDED.session_id, host=EXCLUDED.host,
+         proxy_url=EXCLUDED.proxy_url, proxy_username=EXCLUDED.proxy_username,
+         proxy_password=EXCLUDED.proxy_password, health='healthy', last_health_check=NOW()`,
+      [accountId, req.user.id, provider, region, assignment.ip, assignment.port, assignment.sessionId,
+       assignment.host || null, assignment.proxyUrl || null, assignment.username || null, assignment.password || null]
     );
 
     res.json({
@@ -75,8 +86,8 @@ router.post('/:accountId/rotate', authRequired, async (req, res) => {
   try {
     const assignment = await rotateProxy({ provider: prev.provider, region: prev.region, accountId: parseInt(req.params.accountId) });
     await query(
-      `UPDATE proxy_assignments SET ip_address=$1, session_id=$2, health='healthy', last_health_check=NOW() WHERE account_id=$3`,
-      [assignment.ip, assignment.sessionId, req.params.accountId]
+      `UPDATE proxy_assignments SET ip_address=$1, session_id=$2, proxy_url=$3, proxy_username=$4, proxy_password=$5, host=$6, health='healthy', last_health_check=NOW() WHERE account_id=$7`,
+      [assignment.ip, assignment.sessionId, assignment.proxyUrl || null, assignment.username || null, assignment.password || null, assignment.host || null, req.params.accountId]
     );
     res.json({ success: true, previousIp: prev.ip_address, newIp: assignment.ip, simulated: assignment.simulated });
   } catch (err) {
@@ -96,13 +107,13 @@ router.post('/:accountId/health', authRequired, async (req, res) => {
   const pa = proxy.rows[0];
   let health;
 
-  if (pa.session_id && pa.provider) {
-    // Attempt real health check through the proxy provider
-    const { assignProxy: buildProxy } = await import('../services/proxy-provider.js');
-    // For health check, test connectivity by resolving IP
-    health = await checkProxyHealth(null); // null = direct for now until creds configured
+  if (pa.proxy_url) {
+    health = await checkProxyHealth(pa.proxy_url);
+  } else if (pa.host && pa.proxy_username && pa.proxy_password) {
+    const proxyUrl = `http://${pa.proxy_username}:${pa.proxy_password}@${pa.host}:${pa.port || 33335}`;
+    health = await checkProxyHealth(proxyUrl);
   } else {
-    health = { healthy: true, latency: Math.floor(Math.random() * 30 + 15), ip: pa.ip_address, simulated: true };
+    health = { healthy: true, latency: 0, ip: pa.ip_address || 'direct', simulated: true };
   }
 
   const status = health.healthy ? 'healthy' : 'unhealthy';
@@ -123,7 +134,8 @@ router.post('/health-check-all', authRequired, async (req, res) => {
 
   const results = [];
   for (const pa of proxies.rows) {
-    const health = await checkProxyHealth(null);
+    const proxyUrl = pa.proxy_url || (pa.host && pa.proxy_username ? `http://${pa.proxy_username}:${pa.proxy_password}@${pa.host}:${pa.port || 33335}` : null);
+    const health = await checkProxyHealth(proxyUrl);
     const status = health.healthy ? 'healthy' : 'unhealthy';
     await query('UPDATE proxy_assignments SET health=$1, last_health_check=NOW() WHERE id=$2', [status, pa.id]);
     await query('INSERT INTO proxy_health_log (account_id, ip_address, latency_ms, status) VALUES ($1,$2,$3,$4)',
