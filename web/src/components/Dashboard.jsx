@@ -1516,37 +1516,41 @@ function SettingsPage({ accounts, currentPlan }) {
     apiFetch("/api/settings/risk").then(r => r.ok ? r.json() : null).then(data => {
       if (data?.rules) {
         const r = data.rules;
-        if (r.max_qty) setGlobalMaxQty(r.max_qty);
-        if (r.daily_loss_limit) setGlobalDailyLoss(Number(r.daily_loss_limit));
-        if (r.max_trades_per_day) setGlobalMaxTrades(r.max_trades_per_day);
-        if (r.trailing_drawdown) setGlobalTrailingDD(Number(r.trailing_drawdown));
+        if (r.max_qty != null) setGlobalMaxQty(Number(r.max_qty));
+        if (r.daily_loss_limit != null) setGlobalDailyLoss(Number(r.daily_loss_limit));
+        if (r.max_trades_per_day != null) setGlobalMaxTrades(Number(r.max_trades_per_day));
+        if (r.trailing_drawdown != null) setGlobalTrailingDD(Number(r.trailing_drawdown));
         if (r.kill_switch != null) setKillSwitchActive(r.kill_switch);
-        if (r.copy_delay_ms != null) setCopyDelay(r.copy_delay_ms);
-        if (r.token_refresh_min) setTokenRefreshMin(r.token_refresh_min);
-        if (r.ws_heartbeat_sec) setWsHeartbeatSec(Number(r.ws_heartbeat_sec));
-        if (r.max_reconnects) setMaxReconnects(r.max_reconnects);
+        if (r.copy_delay_ms != null) setCopyDelay(Number(r.copy_delay_ms));
+        if (r.token_refresh_min != null) setTokenRefreshMin(Number(r.token_refresh_min));
+        if (r.ws_heartbeat_sec != null) setWsHeartbeatSec(Number(r.ws_heartbeat_sec));
+        if (r.max_reconnects != null) setMaxReconnects(Number(r.max_reconnects));
+        if (r.copy_symbols) setCopySymbols(r.copy_symbols.split(",").filter(Boolean));
+        if (r.size_mode) setSizeMode(r.size_mode);
+        if (r.size_multiplier != null) setSizeMultiplier(Number(r.size_multiplier));
+        if (r.fixed_qty != null) setFixedQty(Number(r.fixed_qty));
+        if (r.copy_brackets != null) setCopyBrackets(r.copy_brackets);
+        if (r.copy_modifications != null) setCopyModifications(r.copy_modifications);
+        if (r.invert_signals != null) setInvertSignals(r.invert_signals);
+        if (r.session_filter) setSessionFilter(r.session_filter);
+        if (r.rotation_mode) setRotationMode(r.rotation_mode);
+        if (r.rotation_interval != null) setRotationInterval(Number(r.rotation_interval));
+        if (r.health_check_interval != null) setHealthCheckInterval(Number(r.health_check_interval));
+        if (r.auto_rotate_on_fail != null) setAutoRotateOnFail(r.auto_rotate_on_fail);
+        if (r.max_latency_threshold != null) setMaxLatencyThreshold(Number(r.max_latency_threshold));
       }
     }).catch(() => {});
 
     // Load follower overrides from DB
     apiFetch("/api/settings/overrides").then(r => r.ok ? r.json() : null).then(data => {
-      if (data?.overrides?.length) {
-        const map = {};
-        data.overrides.forEach(o => {
-          map[o.account_id] = {
-            sizeMultiplier: o.size_multiplier || 1.0,
-            maxQty: o.max_qty || "",
-            dailyLoss: o.daily_loss_limit ? Number(o.daily_loss_limit) : "",
-          };
-        });
-        setFollowerOverrides(map);
+      if (data?.overrides && typeof data.overrides === "object") {
+        setFollowerOverrides(data.overrides);
       }
     }).catch(() => {});
   }, []);
 
   const handleSave = async () => {
     try {
-      // Save ALL settings (risk rules + connection config)
       const r = await apiFetch("/api/settings/risk", {
         method: "PUT",
         body: JSON.stringify({
@@ -1556,12 +1560,26 @@ function SettingsPage({ accounts, currentPlan }) {
           trailing_drawdown: globalTrailingDD,
           kill_switch: killSwitchActive,
           copy_delay_ms: copyDelay,
+          latency_jitter_ms: 0,
           token_refresh_min: tokenRefreshMin,
           ws_heartbeat_sec: wsHeartbeatSec,
           max_reconnects: maxReconnects,
+          copy_symbols: copySymbols.join(","),
+          size_mode: sizeMode,
+          size_multiplier: sizeMultiplier,
+          fixed_qty: fixedQty,
+          copy_brackets: copyBrackets,
+          copy_modifications: copyModifications,
+          invert_signals: invertSignals,
+          session_filter: sessionFilter,
+          rotation_mode: rotationMode,
+          rotation_interval: rotationInterval,
+          health_check_interval: healthCheckInterval,
+          auto_rotate_on_fail: autoRotateOnFail,
+          max_latency_threshold: maxLatencyThreshold,
         }),
       });
-      if (!r.ok) throw new Error("Settings save failed");
+      if (!r.ok) { const d = await r.json(); throw new Error(d.message || d.error || "Save failed"); }
 
       // Save follower overrides
       const overridePromises = Object.entries(followerOverrides).map(([accountId, ov]) =>

@@ -153,6 +153,26 @@ const migrations = [
     `,
     down: `SELECT 1;`,
   },
+  {
+    id: '010_full_settings',
+    up: `
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS latency_jitter_ms INTEGER DEFAULT 0;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS copy_symbols TEXT DEFAULT 'NQ,ES,YM,RTY';
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS size_mode VARCHAR(20) DEFAULT 'multiplier';
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS size_multiplier DECIMAL(5,2) DEFAULT 1.0;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS fixed_qty INTEGER DEFAULT 1;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS copy_brackets BOOLEAN DEFAULT true;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS copy_modifications BOOLEAN DEFAULT true;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS invert_signals BOOLEAN DEFAULT false;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS session_filter VARCHAR(10) DEFAULT 'all';
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS rotation_mode VARCHAR(20) DEFAULT 'manual';
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS rotation_interval INTEGER DEFAULT 24;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS health_check_interval INTEGER DEFAULT 30;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS auto_rotate_on_fail BOOLEAN DEFAULT true;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS max_latency_threshold INTEGER DEFAULT 100;
+    `,
+    down: `SELECT 1;`,
+  },
 ];
 
 export async function runMigrations(pool) {
