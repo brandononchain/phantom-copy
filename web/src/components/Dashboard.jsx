@@ -572,14 +572,17 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
     }
   };
 
+  const [followerSaving, setFollowerSaving] = useState(false);
+  const [followerComplete, setFollowerComplete] = useState(false);
+
   const handleProxyDone = async () => {
     if (role === "master") {
       setStep("select_account");
     } else {
-      // Save follower account to DB
+      // Save follower to DB with success UX inline
       try {
-        setLaunchPhase("saving");
-        setStep("launch");
+        setFollowerSaving(true);
+        setAuthError(null);
 
         const saveRes = await apiFetch('/api/accounts', {
           method: 'POST',
@@ -607,7 +610,6 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
           latency: Math.floor(Math.random() * 40 + 8),
           brokerAccountId: selectedBrokerAccount?.id || null,
         };
-        onConnect(acc);
 
         // Assign proxy
         if (saveData.account?.id) {
@@ -621,13 +623,13 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
           }).catch(() => {});
         }
 
-        // Show success state
-        setLaunchPhase("complete");
+        setFollowerSaving(false);
+        setFollowerComplete(true);
+        onConnect(acc);
         setTimeout(() => onClose(), 1500);
       } catch (err) {
-        setAuthError(`Failed to save account: ${err.message}`);
-        setLaunchPhase(null);
-        setStep("proxy");
+        setFollowerSaving(false);
+        setAuthError(`Failed to save: ${err.message}`);
       }
     }
   };
@@ -782,7 +784,29 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                   <div className="pa-pv-row"><span className="pa-pv-label">Proxy Type</span><span className="pa-pv-val">Residential Sticky Session</span></div>
                   <div className="pa-pv-row"><span className="pa-pv-label">Rotation</span><span className="pa-pv-val">Manual (on demand)</span></div>
                 </div>
-                <button className="btn-primary btn-full" onClick={handleProxyDone}><span>{role === "master" ? "Continue to Account Selection" : "Connect & Start Copying"}</span><span className="btn-aw"><span className="btn-ar">{role === "master" ? "\u2192" : "\u2713"}</span></span></button>
+
+                {/* Follower saving/complete states */}
+                {role !== "master" && followerComplete && (
+                  <div style={{ textAlign: "center", padding: "20px 0" }} className="fade-in">
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(0,229,160,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#00E5A0", marginBottom: 4 }}>Account Connected Successfully</div>
+                    <div style={{ fontSize: 12, color: "var(--t3)" }}>Redirecting to dashboard...</div>
+                  </div>
+                )}
+                {role !== "master" && followerSaving && (
+                  <div style={{ textAlign: "center", padding: "20px 0" }} className="fade-in">
+                    <div className="ls-spinner" style={{ width: 24, height: 24, margin: "0 auto 12px" }} />
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--t1)" }}>Saving account...</div>
+                  </div>
+                )}
+                {role !== "master" && !followerSaving && !followerComplete && (
+                  <button className="btn-primary btn-full" onClick={handleProxyDone}><span>Connect & Start Copying</span><span className="btn-aw"><span className="btn-ar">{"\u2713"}</span></span></button>
+                )}
+                {role === "master" && (
+                  <button className="btn-primary btn-full" onClick={handleProxyDone}><span>Continue to Account Selection</span><span className="btn-aw"><span className="btn-ar">{"\u2192"}</span></span></button>
+                )}
               </div>
             </div>
           )}
