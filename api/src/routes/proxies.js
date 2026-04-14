@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db/pool.js';
 import { authRequired } from '../middleware/auth.js';
+import { config } from '../config/index.js';
 import { assignProxy, checkProxyHealth, rotateProxy, getAvailableProviders } from '../services/proxy-provider.js';
 
 const router = Router();
@@ -96,6 +97,14 @@ router.post('/:accountId/rotate', authRequired, async (req, res) => {
 });
 
 router.post('/:accountId/health', authRequired, async (req, res) => {
+  // Self-heal: ensure proxy credential columns exist
+  await query(`
+    ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_url TEXT;
+    ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_username TEXT;
+    ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_password TEXT;
+    ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS host VARCHAR(255);
+  `).catch(() => {});
+
   const proxy = await query(
     `SELECT pa.* FROM proxy_assignments pa JOIN accounts a ON a.id = pa.account_id
      WHERE pa.account_id = $1 AND a.user_id = $2`,
@@ -103,15 +112,26 @@ router.post('/:accountId/health', authRequired, async (req, res) => {
   );
   if (proxy.rows.length === 0) return res.status(404).json({ error: 'No proxy assigned' });
 
-  // Real health check: make request through proxy, measure latency
   const pa = proxy.rows[0];
   let health;
 
-  if (pa.proxy_url) {
-    health = await checkProxyHealth(pa.proxy_url);
-  } else if (pa.host && pa.proxy_username && pa.proxy_password) {
-    const proxyUrl = `http://${pa.proxy_username}:${pa.proxy_password}@${pa.host}:${pa.port || 33335}`;
+  // Build proxy URL: prefer stored, then rebuild from provider config
+  let proxyUrl = pa.proxy_url;
+  if (!proxyUrl && pa.provider === 'brightdata' && pa.session_id) {
+    const bd = config.proxy?.brightdata || {};
+    if (bd.username && bd.password) {
+      const geo = pa.region?.includes('west') ? 'us' : pa.region?.includes('central') ? 'us' : 'us';
+      const user = `${bd.username}-zone-${bd.zone || 'residential'}-session-${pa.session_id}-country-${geo}`;
+      proxyUrl = `http://${user}:${bd.password}@brd.superproxy.io:33335`;
+    }
+  }
+
+  if (proxyUrl) {
     health = await checkProxyHealth(proxyUrl);
+    // Store the URL for next time
+    if (!pa.proxy_url) {
+      await query('UPDATE proxy_assignments SET proxy_url = $1 WHERE id = $2', [proxyUrl, pa.id]).catch(() => {});
+    }
   } else {
     health = { healthy: true, latency: 0, ip: pa.ip_address || 'direct', simulated: true };
   }
