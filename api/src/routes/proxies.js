@@ -18,6 +18,28 @@ router.get('/', authRequired, async (req, res) => {
 router.get('/providers', authRequired, (req, res) => {
   res.json({ providers: getAvailableProviders() });
 });
+// ── Test IP: resolve a real proxy IP without saving ──────────────────────────
+router.post('/test-ip', authRequired, async (req, res) => {
+  const { provider = 'brightdata', region = 'us-east' } = req.body;
+  try {
+    const assignment = await assignProxy({
+      provider,
+      region,
+      accountId: 0, // temp session, not saved
+    });
+    res.json({
+      ip: assignment.ip,
+      provider: assignment.provider,
+      region: assignment.region,
+      simulated: assignment.simulated,
+      type: assignment.type,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to resolve IP', message: err.message });
+  }
+});
+
+
 
 router.post('/assign', authRequired, async (req, res) => {
   const { accountId, provider = 'brightdata', region = 'us-east' } = req.body;
