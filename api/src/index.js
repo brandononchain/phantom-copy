@@ -21,6 +21,8 @@ import listenerRoutes from './routes/listeners.js';
 import settingsRoutes from './routes/settings.js';
 import notificationRoutes from './routes/notifications.js';
 import signalRoutes from './routes/signals.js';
+import { listenerManager } from './services/listener-manager.js';
+import { copyEngine } from './services/copy-engine.js';
 
 const app = express();
 
@@ -65,14 +67,14 @@ app.use('/api/', rateLimit({
 app.get('/api/health', async (req, res) => {
   try {
     const dbCheck = await pool.query('SELECT 1');
-    const listenerStatus = listenerManager?.getActiveSessions?.() || [];
+    const listenerStatus = listenerManager?.getStatus?.() || { activeSessions: 0 };
     const copyStats = copyEngine?.getStats?.() || {};
     res.json({
       status: 'healthy',
       ts: new Date().toISOString(),
       v: '1.0.0',
       db: 'connected',
-      activeListeners: listenerStatus.length,
+      listeners: listenerStatus,
       copyEngine: {
         totalSignals: copyStats.totalSignals || 0,
         totalFills: copyStats.totalFills || 0,
@@ -125,15 +127,85 @@ async function start() {
     await runMigrations(pool);
   } catch (err) {
     console.error('[STARTUP] Migration failed:', err.message);
-    // Don't exit - DB might not be ready yet on first deploy, Railway will restart
   }
 
   const port = config.port;
-  app.listen(port, '0.0.0.0', () => {
+  const server = app.listen(port, '0.0.0.0', () => {
     console.log(`[API] Tradevanish API listening on port ${port}`);
     console.log(`[API] Env: ${config.nodeEnv} | CORS: ${config.cors.origin}`);
   });
+
+  // ── Restore active listeners from DB on startup ──────────────────────────
+  // If the server restarted, reconnect any listeners that were running
+  try {
+    const { rows } = await pool.query(
+      `SELECT ls.*, a.credentials_encrypted, a.platform, a.broker_account_id
+       FROM listener_sessions ls
+       JOIN accounts a ON a.id = ls.account_id
+       WHERE ls.status = 'active'`
+    );
+    if (rows.length > 0) {
+      console.log(`[STARTUP] Restoring ${rows.length} active listener(s)...`);
+      for (const session of rows) {
+        try {
+          let creds = {};
+          try { creds = JSON.parse(session.credentials_encrypted || '{}'); } catch {}
+          if (creds.token || creds.loginKey) {
+            await listenerManager.startListener({
+              userId: session.user_id,
+              accountId: session.account_id,
+              platform: session.platform,
+              brokerAccountId: session.broker_account_id,
+              credentials: creds,
+            });
+            console.log(`[STARTUP] Restored listener for account ${session.account_id}`);
+          }
+        } catch (err) {
+          console.error(`[STARTUP] Failed to restore listener ${session.account_id}: ${err.message}`);
+          await pool.query(
+            `UPDATE listener_sessions SET status = 'stopped', stopped_at = NOW() WHERE id = $1`,
+            [session.id]
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[STARTUP] Listener restore failed:', err.message);
+  }
+
+  // ── Graceful Shutdown ────────────────────────────────────────────────────
+  async function shutdown(signal) {
+    console.log(`[API] ${signal} received. Graceful shutdown...`);
+
+    server.close(() => {
+      console.log('[API] HTTP server closed');
+    });
+
+    // Mark all active listeners as stopped (they'll be restored on next boot)
+    try {
+      await pool.query(
+        `UPDATE listener_sessions SET status = 'restarting' WHERE status = 'active'`
+      );
+    } catch {}
+
+    try {
+      await pool.end();
+      console.log('[API] Database pool closed');
+    } catch {}
+
+    setTimeout(() => process.exit(0), 10000);
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
+
+process.on('uncaughtException', (err) => {
+  console.error('[API] Uncaught exception:', err.message, err.stack);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[API] Unhandled rejection:', reason);
+});
 
 start().catch(err => {
   console.error('[FATAL]', err.message);
