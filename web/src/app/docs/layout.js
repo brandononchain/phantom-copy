@@ -1,8 +1,6 @@
 export const metadata = {
-  title: 'Tradevanish Docs',
-  description: 'Documentation for Tradevanish - The Stealth Standard for Modern Prop Trading',
+  title: 'Documentation',
+  description: 'Tradevanish documentation. Learn how to set up copy trading, connect brokers, configure risk management, use the REST API, and integrate TradingView signals.',
+  alternates: { canonical: 'https://www.tradevanish.com/docs' },
 };
-
-export default function DocsLayout({ children }) {
-  return children;
-}
+export default function Layout({ children }) { return children; }

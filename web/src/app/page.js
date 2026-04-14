@@ -114,22 +114,22 @@ export default function LandingPage() {
         <div className="hero-content">
           <div className="hero-badge">
             <span className="hero-badge-dot" />
-            Cloud-native copy trading infrastructure
+            Stealth copy trading for prop firm traders
           </div>
 
           <h1 className="hero-h1">
-            Copy trades at scale.<br />
-            <span className="accent">One IP per account.</span>
+            Trade once.<br />
+            <span className="accent">Execute everywhere.</span>
           </h1>
 
           <p className="hero-sub">
-            Replicate master signals across unlimited prop firm accounts.
-            Each routed through a dedicated residential proxy.
-            Undetectable by design.
+            One master trade replicates to every prop firm account instantly.
+            Each connection isolated behind its own residential IP.
+            No shared fingerprints. No correlation. No detection.
           </p>
 
           <div className="hero-actions">
-            <a href="/sign-up" className="hero-btn-primary">Start Trading</a>
+            <a href="/sign-up" className="hero-btn-primary">Get Started Free</a>
             <a href="/docs" className="hero-btn-ghost">Read the Docs</a>
           </div>
         </div>

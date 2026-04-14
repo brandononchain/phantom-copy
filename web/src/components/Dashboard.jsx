@@ -1985,7 +1985,7 @@ function OnboardingOverlay({ onComplete }) {
       body: "Tradevanish connects to your broker, watches your master account for trades, and replicates them to every follower account instantly. Each account routes through its own dedicated residential proxy so every connection looks independent." },
     { title: "How It Works", sub: "Three things happen when you set up:", icon: "flow",
       items: [
-        { num: "1", t: "Connect your broker", d: "Sign in with Tradovate or Rithmic. OAuth flow means your password never touches our servers." },
+        { num: "1", t: "Connect your broker", d: "TopStepX (ProjectX), Tradovate, NinjaTrader, or Rithmic. OAuth or API key auth." },
         { num: "2", t: "Get a unique IP", d: "Each account gets a dedicated residential proxy. Brokers see unique IPs per account." },
         { num: "3", t: "Start copying", d: "Master listener watches for trades. Followers execute in parallel through their own proxies." },
       ]},
@@ -2908,9 +2908,10 @@ export default function App({ initialMode }) {
     setUser(userData);
     setAuthToken(token);
     setCurrentPlan(userData.plan || "basic");
-    setShowOnboarding(true);
     if (token && typeof window !== "undefined") localStorage.setItem("tv_token", token);
-    // If on /sign-in or /sign-up, redirect to /app
+    // Only show onboarding for brand new accounts (created within last 60 seconds)
+    const isNewAccount = userData.created_at && (Date.now() - new Date(userData.created_at).getTime() < 60000);
+    if (isNewAccount) setShowOnboarding(true);
     if (typeof window !== "undefined" && (window.location.pathname === "/sign-in" || window.location.pathname === "/sign-up")) {
       window.history.replaceState({}, "", "/app");
     }

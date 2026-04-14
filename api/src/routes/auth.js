@@ -55,7 +55,7 @@ router.post('/login', async (req, res) => {
 
   try {
     const result = await query(
-      'SELECT id, email, name, plan, password_hash, totp_secret, totp_enabled FROM users WHERE email = $1',
+      'SELECT id, email, name, plan, password_hash, totp_secret, totp_enabled, created_at FROM users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
     if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
@@ -80,7 +80,7 @@ router.post('/login', async (req, res) => {
 
     const token = signToken(user);
     setTokenCookie(res, token);
-    res.json({ user: { id: user.id, email: user.email, name: user.name, plan: user.plan }, token });
+    res.json({ user: { id: user.id, email: user.email, name: user.name, plan: user.plan, created_at: user.created_at }, token });
   } catch (err) {
     res.status(500).json({ error: 'Login failed' });
   }
