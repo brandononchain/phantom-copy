@@ -47,6 +47,15 @@ router.put('/risk', authRequired, async (req, res) => {
   } = req.body;
 
   try {
+    // Self-heal: ensure columns exist (idempotent)
+    await query(`
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS copy_delay_ms INTEGER DEFAULT 0;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS latency_jitter_ms INTEGER DEFAULT 0;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS token_refresh_min INTEGER DEFAULT 85;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS ws_heartbeat_sec DECIMAL(4,1) DEFAULT 2.5;
+      ALTER TABLE risk_rules ADD COLUMN IF NOT EXISTS max_reconnects INTEGER DEFAULT 20;
+    `).catch(() => {});
+
     const result = await query(
       `INSERT INTO risk_rules (
         user_id, max_qty, daily_loss_limit, max_trades_per_day,
