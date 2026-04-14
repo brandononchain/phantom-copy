@@ -514,6 +514,8 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
   const handleFinish = async () => {
     // Save account to DB so it persists across sessions
     try {
+      setLaunchPhase("saving");
+
       const saveRes = await apiFetch('/api/accounts', {
         method: 'POST',
         body: JSON.stringify({
@@ -556,12 +558,17 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
         }).catch(() => {});
       }
 
-      if (role === "master") {
-        setTimeout(() => onStartListener?.(), 100);
-      }
-      onClose();
+      // Show success state for 1.5 seconds before closing
+      setLaunchPhase("complete");
+      setTimeout(() => {
+        if (role === "master") {
+          onStartListener?.();
+        }
+        onClose();
+      }, 1500);
     } catch (err) {
       setAuthError(`Failed to save account: ${err.message}`);
+      setLaunchPhase("ready");
     }
   };
 
@@ -851,6 +858,25 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                     </button>
                   </div>
                 )}
+
+                {/* Saving State */}
+                {launchPhase === "saving" && (
+                  <div className="launch-ready fade-in" style={{ textAlign: "center" }}>
+                    <div className="ls-spinner" style={{ width: 24, height: 24, margin: "0 auto 12px" }} />
+                    <div className="launch-ready-title">Saving account...</div>
+                  </div>
+                )}
+
+                {/* Complete State */}
+                {launchPhase === "complete" && (
+                  <div className="launch-ready fade-in" style={{ textAlign: "center" }}>
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(0,229,160,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <div className="launch-ready-title" style={{ color: "#00E5A0" }}>Account Connected Successfully</div>
+                    <div className="launch-ready-sub">Redirecting to dashboard...</div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -923,7 +949,7 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
           <div className="how-title">How connection works</div>
           <div className="how-steps">
             {[
-              ["1", "Choose platform", "Tradovate, Rithmic, or NinjaTrader"],
+              ["1", "Choose platform", "TopStepX, Tradovate, Rithmic, or NinjaTrader"],
               ["2", "Sign in to broker", "OAuth or direct login. Password never stored."],
               ["3", "Auto-assign IP", "Residential proxy locks to this account"],
               ["4", "Start listener", "Master WebSocket opens. Followers copy instantly."],
