@@ -657,7 +657,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
   const maxStep = role === "master" ? 4 : 2; // followers end at IP (index 2)
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={() => { if (!followerSaving && !followerComplete && launchPhase !== "saving" && launchPhase !== "complete") onClose(); }}>
       <div className={cn("modal-shell", (step === "launch") && "modal-shell-wide")} onClick={e => e.stopPropagation()}>
         <div className="modal-inner">
           <div className="modal-head">
@@ -665,7 +665,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
               <h2 className="modal-title">{stepTitles[step]}</h2>
               <p className="modal-sub">{stepSubs[step]}</p>
             </div>
-            <button className="modal-close" onClick={onClose}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            <button className="modal-close" onClick={() => { if (!followerSaving && !followerComplete && launchPhase !== "saving" && launchPhase !== "complete") onClose(); }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
           </div>
 
           {/* Step: Platform */}
