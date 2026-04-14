@@ -1450,14 +1450,18 @@ function ProxyPage({ accounts, onRotateProxy, onTestProxy, onRotateAll }) {
     <div className="page fade-in">
       <div className="pg-head"><div><h1 className="pg-title">IP Mixer</h1><p className="pg-sub">Each account routes through a dedicated residential proxy</p></div><button className="btn-primary" onClick={onRotateAll}><span>Rotate All IPs</span><span className="btn-aw"><span className="btn-ar">&#8635;</span></span></button></div>
       <div className="proxy-grid">
-        {accounts.map((a, i) => (
+        {accounts.map((a, i) => {
+          const isLoading = a.health === "rotating" || a.health === "testing";
+          const statusColor = a.health === "healthy" ? "#00E5A0" : a.health === "unhealthy" || a.health === "error" ? "#FF4D4D" : "var(--t3)";
+          return (
           <div key={a.id} className="px-shell" style={{ animationDelay: `${i * 70}ms` }}><div className="px-inner">
             <div className="px-top"><div className="px-name-r"><StatusDot status={a.status} /><span className="px-name">{a.label}</span></div><span className="px-prov">{a.proxy}</span></div>
-            <div className="px-ip-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.5"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="7" cy="12" r="1.5" fill="currentColor"/></svg><div><div className="px-ip">{a.ip}</div><div className="px-region">{a.region}</div></div></div>
-            <div className="px-meta"><div><span className="px-ml">LATENCY</span><LatBar ms={a.latency} /></div><div><span className="px-ml">UPTIME</span><span className="px-mv">{a.latency ? "99.8%" : "0%"}</span></div></div>
-            <div className="px-acts"><button className="px-btn" onClick={() => onRotateProxy(a.id)}>Rotate IP</button><button className="px-btn px-btn-a" onClick={() => onTestProxy(a.id)}>Test</button></div>
+            <div className="px-ip-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.5"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="7" cy="12" r="1.5" fill="currentColor"/></svg><div><div className="px-ip">{isLoading ? <span style={{ opacity: 0.4 }}>{a.health === "rotating" ? "Rotating..." : "Testing..."}</span> : (a.ip || "Not assigned")}</div><div className="px-region">{a.region}</div></div></div>
+            <div className="px-meta"><div><span className="px-ml">LATENCY</span><LatBar ms={a.latency} /></div><div><span className="px-ml">STATUS</span><span className="px-mv" style={{ color: statusColor, fontWeight: 600 }}>{a.health === "rotating" ? "Rotating" : a.health === "testing" ? "Testing" : a.health === "healthy" ? "Healthy" : a.health === "unhealthy" ? "Unhealthy" : a.health === "error" ? "Error" : a.ip ? "Active" : "Pending"}</span></div></div>
+            <div className="px-acts"><button className="px-btn" onClick={() => onRotateProxy(a.id)} disabled={isLoading}>{isLoading && a.health === "rotating" ? "Rotating..." : "Rotate IP"}</button><button className="px-btn px-btn-a" onClick={() => onTestProxy(a.id)} disabled={isLoading}>{isLoading && a.health === "testing" ? "Testing..." : "Test"}</button></div>
           </div></div>
-        ))}
+          );
+        })}
       </div>
       <div className="card-sh"><div className="card-in"><div className="card-hd"><h2 className="card-t">Provider Pool</h2></div><div className="prov-grid">{PROXY_PROVIDERS.map(p => { const c = accounts.filter(a => a.proxy === p).length; return (<div key={p} className="prov-item"><div className="prov-name">{p}</div><div className="prov-count">{c} assigned</div><div className="prov-bar-bg"><div className="prov-bar" style={{ width: `${(c / (accounts.length || 1)) * 100}%` }} /></div></div>); })}</div></div></div>
     </div>
@@ -1465,7 +1469,7 @@ function ProxyPage({ accounts, onRotateProxy, onTestProxy, onRotateAll }) {
 }
 
 // ─── Settings Page ───────────────────────────────────────────────────────────
-function SettingsPage({ accounts }) {
+function SettingsPage({ accounts, currentPlan }) {
   const followers = accounts.filter(a => a.role === "follower");
   const master = accounts.find(a => a.role === "master");
 
@@ -1767,7 +1771,7 @@ function SettingsPage({ accounts }) {
         <div className="card-hd"><h2 className="card-t">Per-Follower Overrides</h2><span className="badge">{followers.length} FOLLOWERS</span>{currentPlan === "basic" && <span className="badge" style={{ background: "rgba(99,102,241,0.1)", color: "#6366f1", borderColor: "rgba(99,102,241,0.2)", marginLeft: 8 }}>PRO</span>}</div>
         <div className="set-section">
           {currentPlan === "basic" ? (
-            <p className="set-help" style={{ marginBottom: 16 }}>Per-follower overrides require a Pro or Pro+ plan. <a href="#" onClick={e => { e.preventDefault(); onNav && onNav("profile"); }} style={{ color: "#6366f1", textDecoration: "none" }}>Upgrade your plan</a> to customize risk rules per account.</p>
+            <p className="set-help" style={{ marginBottom: 16 }}>Per-follower overrides require a Pro or Pro+ plan. <a href="#" onClick={e => { e.preventDefault(); window.location.hash = "profile"; }} style={{ color: "#6366f1", textDecoration: "none" }}>Upgrade your plan</a> to customize risk rules per account.</p>
           ) : (
           <>
           <p className="set-help" style={{ marginBottom: 16 }}>Override global risk rules for individual accounts. Accounts without overrides inherit global settings.</p>
@@ -3031,15 +3035,22 @@ export default function App({ initialMode }) {
           // Load saved accounts from DB
           apiFetch("/api/accounts").then(r => r.ok ? r.json() : null).then(acctData => {
             if (acctData?.accounts?.length) {
-              setAccounts(acctData.accounts.map(a => ({
-                id: a.id, label: a.label || `${a.platform} Account`, platform: a.platform,
-                role: a.role, status: a.status || "connected",
-                ip: a.ip_address ? a.ip_address.replace(/\.\d+\.\d+$/, ".xx." + a.ip_address.split(".").pop()) : null,
-                proxy: a.provider || "BrightData", region: a.region || "US-East",
-                pnl: 0, trades: 0, latency: a.ip_address ? Math.floor(Math.random() * 25 + 10) : null,
-                brokerAccountId: a.broker_account_id,
-                balance: null, balanceDisplay: null,
-              })));
+              setAccounts(acctData.accounts.map(a => {
+                const provMap = { brightdata: "BrightData", oxylabs: "Oxylabs", smartproxy: "SmartProxy", iproyal: "IPRoyal" };
+                const regionMap = { "us-east": "US-East", "us-west": "US-West", "us-central": "US-Central", "eu-west": "EU-West", "eu-central": "EU-Central" };
+                return {
+                  id: a.id, label: a.label || `${a.platform} Account`, platform: a.platform,
+                  role: a.role, status: a.status || "connected",
+                  ip: a.ip_address ? a.ip_address.replace(/\.\d+\.\d+$/, ".xx." + a.ip_address.split(".").pop()) : null,
+                  fullIp: a.ip_address || null,
+                  proxy: provMap[a.provider] || a.provider || "BrightData",
+                  region: regionMap[a.region] || a.region || "US-East",
+                  pnl: 0, trades: 0, latency: a.ip_address ? Math.floor(Math.random() * 25 + 10) : null,
+                  brokerAccountId: a.broker_account_id,
+                  balance: null, balanceDisplay: null,
+                  health: a.health || null,
+                };
+              }));
             }
           }).catch(() => {});
 
@@ -3191,30 +3202,45 @@ export default function App({ initialMode }) {
   };
 
   const rotateProxy = async (accountId) => {
+    setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, health: "rotating" } : a));
     try {
       const r = await apiFetch(`/api/proxies/${accountId}/rotate`, { method: "POST" });
       const data = await r.json();
-      if (data.success) {
-        setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, ip: data.newIp ? data.newIp.replace(/\.\d+\.\d+$/, ".xx." + data.newIp.split(".").pop()) : a.ip } : a));
+      if (data.success && data.newIp) {
+        setAccounts(prev => prev.map(a => a.id === accountId ? {
+          ...a,
+          ip: data.newIp.replace(/\.\d+\.\d+$/, ".xx." + data.newIp.split(".").pop()),
+          fullIp: data.newIp,
+          health: "healthy",
+        } : a));
+      } else {
+        setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, health: "error" } : a));
       }
-    } catch (err) {
-      console.error("Rotate failed:", err);
+    } catch {
+      setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, health: "error" } : a));
     }
   };
 
   const testProxy = async (accountId) => {
+    setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, health: "testing" } : a));
     try {
       const r = await apiFetch(`/api/proxies/${accountId}/health`, { method: "POST" });
       const data = await r.json();
-      setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, latency: data.latency || a.latency } : a));
-      alert(data.healthy ? `Proxy healthy. Latency: ${data.latency}ms` : `Proxy unhealthy: ${data.error}`);
-    } catch (err) {
-      console.error("Test failed:", err);
+      setAccounts(prev => prev.map(a => a.id === accountId ? {
+        ...a,
+        latency: data.latency || a.latency,
+        health: data.healthy ? "healthy" : "unhealthy",
+        fullIp: data.ip || a.fullIp,
+        ip: data.ip ? data.ip.replace(/\.\d+\.\d+$/, ".xx." + data.ip.split(".").pop()) : a.ip,
+      } : a));
+    } catch {
+      setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, health: "error" } : a));
     }
   };
 
   const rotateAllProxies = async () => {
-    for (const a of accounts) {
+    const proxyAccounts = accounts.filter(a => a.ip);
+    for (const a of proxyAccounts) {
       await rotateProxy(a.id);
     }
   };
