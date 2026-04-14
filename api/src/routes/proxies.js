@@ -175,4 +175,31 @@ router.get('/:accountId/health-history', authRequired, async (req, res) => {
   res.json({ history: result.rows });
 });
 
+
+router.get('/:accountId/debug', authRequired, async (req, res) => {
+  const proxy = await query(
+    'SELECT pa.* FROM proxy_assignments pa JOIN accounts a ON a.id = pa.account_id WHERE pa.account_id = $1 AND a.user_id = $2',
+    [req.params.accountId, req.user.id]
+  );
+  if (proxy.rows.length === 0) return res.json({ error: 'no proxy' });
+  const pa = proxy.rows[0];
+  
+  let builtUrl = null;
+  const bdc = config.proxy?.brightdata || {};
+  if (pa.provider === 'brightdata' && pa.session_id && bdc.username && bdc.password) {
+    const user = bdc.username + '-zone-' + (bdc.zone || 'residential') + '-session-' + pa.session_id + '-country-us';
+    builtUrl = 'http://' + user + ':' + bdc.password + '@brd.superproxy.io:33335';
+  }
+
+  res.json({
+    stored_proxy_url: pa.proxy_url ? 'SET' : 'NULL',
+    built_url: builtUrl ? 'BUILT' : 'NULL',
+    would_use: pa.proxy_url ? 'stored' : builtUrl ? 'built' : 'none',
+    provider: pa.provider,
+    session_id: pa.session_id,
+    ip: pa.ip_address,
+    bd_configured: !!bdc.username,
+  });
+});
+
 export default router;
