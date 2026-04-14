@@ -3019,8 +3019,9 @@ export default function App({ initialMode }) {
     // Only show onboarding for brand new accounts (created within last 60 seconds)
     const isNewAccount = userData.created_at && (Date.now() - new Date(userData.created_at).getTime() < 60000);
     if (isNewAccount) setShowOnboarding(true);
+    // Navigate to /app if on sign-in or sign-up pages
     if (typeof window !== "undefined" && (window.location.pathname === "/sign-in" || window.location.pathname === "/sign-up")) {
-      window.history.replaceState({}, "", "/app");
+      window.location.href = "/app";
     }
   };
 
