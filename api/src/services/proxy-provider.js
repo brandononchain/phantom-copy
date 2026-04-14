@@ -141,8 +141,8 @@ export async function assignProxy({ provider = 'brightdata', region = 'us-east',
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const { default: undiciFetch } = await import('undici');
-    const res = await undiciFetch.fetch('https://api.ipify.org?format=json', {
+    const { fetch: uFetch } = await import('undici');
+    const res = await uFetch('https://api.ipify.org?format=json', {
       dispatcher,
       signal: controller.signal,
     });
@@ -197,11 +197,11 @@ export async function checkProxyHealth(proxyUrl) {
   const start = Date.now();
 
   try {
-    const { default: undici } = await import('undici');
+    const { fetch: uFetch2 } = await import('undici');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await undici.fetch('https://api.ipify.org?format=json', {
+    const res = await uFetch2('https://api.ipify.org?format=json', {
       dispatcher,
       signal: controller.signal,
     });

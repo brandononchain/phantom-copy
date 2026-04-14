@@ -336,8 +336,8 @@ export class CopyEngine extends EventEmitter {
           };
           if (agent) fetchOpts.dispatcher = agent;
 
-          const { default: undici } = await import('undici');
-          const res = await undici.fetch(`${baseUrl}/order/placeorder`, fetchOpts);
+          const { fetch: uFetch } = await import('undici');
+          const res = await uFetch(`${baseUrl}/order/placeorder`, fetchOpts);
           const data = await res.json();
           if (data.failureReason) throw new Error(data.failureReason);
           return { orderId: data.orderId, platform: 'tradovate' };
