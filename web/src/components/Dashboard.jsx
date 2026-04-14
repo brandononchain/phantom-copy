@@ -2664,8 +2664,8 @@ function Placeholder({ title, sub }) {
 }
 
 // ─── Auth Screen ─────────────────────────────────────────────────────────────
-function AuthScreen({ onAuth }) {
-  const [mode, setMode] = useState("login"); // login | register | forgot | reset | 2fa
+function AuthScreen({ onAuth, initialMode }) {
+  const [mode, setMode] = useState(initialMode || "login"); // login | register | forgot | reset | 2fa
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -2826,7 +2826,7 @@ function AuthScreen({ onAuth }) {
 }
 
 // ─── App Root ────────────────────────────────────────────────────────────────
-export default function App() {
+export default function App({ initialMode }) {
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -2905,15 +2905,18 @@ export default function App() {
     setCurrentPlan(userData.plan || "basic");
     setShowOnboarding(true);
     if (token && typeof window !== "undefined") localStorage.setItem("tv_token", token);
+    // If on /sign-in or /sign-up, redirect to /app
+    if (typeof window !== "undefined" && (window.location.pathname === "/sign-in" || window.location.pathname === "/sign-up")) {
+      window.history.replaceState({}, "", "/app");
+    }
   };
 
   const handleSignOut = () => {
     apiFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-    if (typeof window !== "undefined") localStorage.removeItem("tv_token");
-    // Clear UI state only - do NOT stop backend listeners
-    // Listeners run server-side and should persist across sessions
-    setUser(null); setAuthToken(null); setPage("overview"); setAccounts([]);
-    setListenerState("idle"); setListenerStage(null); setEvents([]); setPositions([]);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("tv_token");
+      window.location.href = "/";
+    }
   };
 
   // Master listener state machine
@@ -3070,7 +3073,7 @@ export default function App() {
   }
 
   if (!user) {
-    return (<><style>{STYLES}</style><AuthScreen onAuth={handleAuth} /></>);
+    return (<><style>{STYLES}</style><AuthScreen onAuth={handleAuth} initialMode={initialMode} /></>);
   }
 
   return (
