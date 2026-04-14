@@ -898,34 +898,38 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
 
 // ─── Accounts Page ───────────────────────────────────────────────────────────
 // ─── Master Account Stats Bar ────────────────────────────────────────────────
-function MasterStatsBar({ accountId }) {
-  const [stats, setStats] = useState(null);
+function MasterStatsBar({ accountId, balance, balanceDisplay }) {
+  const [stats, setStats] = useState({ balance: balance || null, equity: null, totalPnl: null, tradingDays: null, winRate: null, wins: null, losses: null, totalTrades: null });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!accountId) return;
+    if (!accountId) { setLoading(false); return; }
     apiFetch("/api/brokers/stats", { method: "POST", body: JSON.stringify({ accountId }) })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setStats(d); })
-      .catch(() => {});
+      .then(d => { if (d && !d.error) setStats(prev => ({ ...prev, ...d })); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [accountId]);
 
-  if (!stats) return null;
+  const fmt = (v) => v != null ? `$${Number(v).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "--";
+  const pnlColor = stats.totalPnl >= 0 ? "#00E5A0" : "#FF4D4D";
+  const wrColor = stats.winRate >= 50 ? "#00E5A0" : stats.winRate != null ? "#FF4D4D" : "var(--t3)";
 
-  const statItems = [
-    { label: "BALANCE", value: stats.balance != null ? `$${Number(stats.balance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "--", color: "#00E5A0" },
-    { label: "EQUITY", value: stats.equity != null ? `$${Number(stats.equity).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : "--", color: "var(--t1)" },
-    { label: "TOTAL P&L", value: stats.totalPnl != null ? `${stats.totalPnl >= 0 ? "+" : ""}$${Number(stats.totalPnl).toLocaleString(undefined, {minimumFractionDigits: 2})}` : "--", color: stats.totalPnl >= 0 ? "#00E5A0" : "var(--red)" },
-    { label: "TRADING DAYS", value: stats.tradingDays != null ? String(stats.tradingDays) : "--", color: "var(--t1)" },
-    { label: "WIN RATE", value: stats.winRate != null ? `${stats.winRate}%` : "--", color: stats.winRate >= 50 ? "#00E5A0" : stats.winRate ? "var(--red)" : "var(--t1)" },
+  const items = [
+    { label: "BALANCE", value: fmt(stats.balance), color: "#00E5A0" },
+    { label: "EQUITY", value: fmt(stats.equity), color: "var(--t1)" },
+    { label: "P&L", value: stats.totalPnl != null ? `${stats.totalPnl >= 0 ? "+" : ""}${fmt(stats.totalPnl)}` : "--", color: pnlColor },
+    { label: "TRADES", value: stats.totalTrades != null ? String(stats.totalTrades) : "--", color: "var(--t1)" },
+    { label: "WIN RATE", value: stats.winRate != null ? `${stats.winRate}%` : "--", color: wrColor },
     { label: "W / L", value: stats.wins != null ? `${stats.wins} / ${stats.losses}` : "--", color: "var(--t1)" },
   ];
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--bdr)", borderRadius: 10, overflow: "hidden", margin: "12px 0" }}>
-      {statItems.map(s => (
+      {items.map(s => (
         <div key={s.label} style={{ background: "rgba(255,255,255,0.02)", padding: "12px 14px", textAlign: "center" }}>
           <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", color: "var(--t3)", fontFamily: "var(--sans)", marginBottom: 6 }}>{s.label}</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: s.color, fontFamily: "var(--mono)" }}>{s.value}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: loading ? "var(--t3)" : s.color, fontFamily: "var(--mono)", opacity: loading ? 0.4 : 1 }}>{loading ? "..." : s.value}</div>
         </div>
       ))}
     </div>
@@ -976,8 +980,9 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
                 <div className="acct-m-info"><StatusDot status={listenerState === "listening" ? "listening" : master.status} /><div><div className="acct-m-name">{master.label}</div><div className="acct-m-sub">{master.platform}</div></div></div>
                 <IPBadge ip={master.ip} provider={master.proxy} region={master.region} />
                 <div className="acct-m-stat"><span className="acct-m-stat-label">LATENCY</span><LatBar ms={master.latency} /></div>
+                {master.balance && <div className="acct-m-stat"><span className="acct-m-stat-label">BALANCE</span><span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 700, color: "#00E5A0" }}>${Number(master.balance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>}
               </div>
-              <MasterStatsBar accountId={master.id} />
+              <MasterStatsBar accountId={master.id} balance={master.balance} balanceDisplay={master.balanceDisplay} />
               <MasterListenerPanel master={master} listenerState={listenerState} listenerStage={listenerStage} events={events} positions={positions} onStartListener={onStartListener} onStopListener={onStopListener} />
             </div>
           ) : (
