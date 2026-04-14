@@ -124,8 +124,8 @@ export default function LandingPage() {
 
           <p className="hero-sub">
             One master trade replicates to every prop firm account instantly.
-            Each connection isolated behind its own residential IP.
-            No shared fingerprints. No correlation. No detection.
+            Each connection isolated behind its own residential IP.<br />
+            <span style={{color:'rgba(255,255,255,0.55)',fontWeight:500}}>No shared fingerprints. No correlation. No detection.</span>
           </p>
 
           <div className="hero-actions">
