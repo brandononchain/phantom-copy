@@ -676,8 +676,8 @@ function Markdown({ text }) {
     elements.push(
       <div key={`tbl-${i}`} className="tv-doc-table-wrap">
         <table className="tv-doc-table">
-          <thead><tr>{headers.map((h, j) => <th key={j}>{renderInline(h.trim())}</th>)}</tr></thead>
-          <tbody>{rows.map((r, ri) => <tr key={ri}>{r.map((c, ci) => <td key={ci}>{renderInline(c.trim())}</td>)}</tr>)}</tbody>
+          <thead><tr>{headers.map((h, j) => <th key={j} dangerouslySetInnerHTML={{ __html: renderInline(h.trim()) }} />)}</tr></thead>
+          <tbody>{rows.map((r, ri) => <tr key={ri}>{r.map((c, ci) => <td key={ci} dangerouslySetInnerHTML={{ __html: renderInline(c.trim()) }} />)}</tr>)}</tbody>
         </table>
       </div>
     );
