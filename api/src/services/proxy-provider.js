@@ -201,7 +201,7 @@ export async function checkProxyHealth(proxyUrl) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await uFetch2('https://api.ipify.org?format=json', {
+    const res = await uFetch2('http://lumtest.com/myip.json', {
       dispatcher,
       signal: controller.signal,
     });
