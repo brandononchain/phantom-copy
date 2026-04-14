@@ -1,88 +1,25 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 
 export default function LandingPage() {
-  const canvasRef = useRef(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let animId;
-    let time = 0;
-
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    resize();
-    window.addEventListener('resize', resize);
-
-    function draw() {
-      time += 0.003;
-      const w = canvas.width, h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      const spacing = 60;
-      const cols = Math.ceil(w / spacing) + 2;
-      const rows = Math.ceil(h / spacing) + 2;
-
-      for (let i = 0; i < cols; i++) {
-        for (let j = 0; j < rows; j++) {
-          const x = i * spacing;
-          const y = j * spacing;
-          const distFromCenter = Math.sqrt(Math.pow(x - w/2, 2) + Math.pow(y - h*0.35, 2));
-          const wave = Math.sin(distFromCenter * 0.003 - time * 2) * 0.5 + 0.5;
-          const alpha = Math.max(0.02, wave * 0.08 - distFromCenter * 0.00005);
-
-          ctx.fillStyle = `rgba(99, 102, 241, ${alpha})`;
-          ctx.fillRect(x - 0.5, y - 0.5, 1, 1);
-
-          if (i < cols - 1) {
-            ctx.strokeStyle = `rgba(99, 102, 241, ${alpha * 0.4})`;
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x + spacing, y);
-            ctx.stroke();
-          }
-          if (j < rows - 1) {
-            ctx.strokeStyle = `rgba(99, 102, 241, ${alpha * 0.3})`;
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x, y + spacing);
-            ctx.stroke();
-          }
+    // Load UnicornStudio for animated background
+    if (!window.UnicornStudio) {
+      window.UnicornStudio = { isInitialized: false };
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v1.4.29/dist/unicornStudio.umd.js';
+      s.onload = () => {
+        if (!window.UnicornStudio.isInitialized) {
+          UnicornStudio.init();
+          window.UnicornStudio.isInitialized = true;
         }
-      }
-
-      const grd = ctx.createRadialGradient(w/2, h * 0.35, 0, w/2, h * 0.35, w * 0.5);
-      grd.addColorStop(0, 'rgba(99, 102, 241, 0.06)');
-      grd.addColorStop(0.5, 'rgba(99, 102, 241, 0.02)');
-      grd.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grd;
-      ctx.fillRect(0, 0, w, h);
-
-      for (let r = 0; r < 3; r++) {
-        const radius = ((time * 80 + r * 200) % 600);
-        const pulseAlpha = Math.max(0, 0.08 - radius * 0.00015);
-        ctx.strokeStyle = `rgba(99, 102, 241, ${pulseAlpha})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(w/2, h * 0.35, radius, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      animId = requestAnimationFrame(draw);
+      };
+      document.head.appendChild(s);
+    } else if (window.UnicornStudio.isInitialized) {
+      UnicornStudio.init();
     }
-    draw();
-
-    return () => {
-      cancelAnimationFrame(animId);
-      window.removeEventListener('resize', resize);
-    };
   }, []);
 
   return (
@@ -91,9 +28,16 @@ export default function LandingPage() {
         @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         html,body{background:#030306;overflow-x:hidden}
+
         .hero{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;font-family:'Instrument Sans',-apple-system,sans-serif;color:#fff}
-        .hero-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+        /* Aura background */
+        .aura-bg{position:absolute;top:0;left:0;width:100%;height:800px;saturate:1.5;filter:saturate(1.5);z-index:0;mask-image:linear-gradient(transparent,black 0%,black 80%,transparent);-webkit-mask-image:linear-gradient(transparent,black 0%,black 80%,transparent)}
+        .aura-bg>div{position:absolute;top:0;left:0;width:100%;height:100%}
+
+        /* Noise */
         .hero::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:1}
+
         .hero-nav{position:relative;z-index:10;width:100%;max-width:1200px;display:flex;align-items:center;justify-content:space-between;padding:24px 32px;opacity:0;animation:fadeDown .8s ease forwards .2s}
         .hero-nav-brand{display:flex;align-items:center;gap:10px}
         .hero-nav-brand img{width:28px;height:28px;border-radius:6px}
@@ -103,6 +47,7 @@ export default function LandingPage() {
         .hero-nav-links a:hover{color:#fff}
         .hero-nav-cta{background:rgba(255,255,255,.06)!important;border:1px solid rgba(255,255,255,.08);color:#fff!important;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;transition:all .2s}
         .hero-nav-cta:hover{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.15)}
+
         .hero-content{position:relative;z-index:10;text-align:center;max-width:800px;padding:120px 24px 0}
         .hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px 6px 8px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.15);border-radius:100px;font-size:12px;font-weight:500;color:rgba(255,255,255,.6);margin-bottom:28px;opacity:0;animation:fadeUp .7s ease forwards .4s;letter-spacing:-.01em}
         .hero-badge-dot{width:6px;height:6px;background:#6366f1;border-radius:50%;animation:pulse 2s ease-in-out infinite}
@@ -114,6 +59,7 @@ export default function LandingPage() {
         .hero-btn-primary:hover{transform:translateY(-1px);box-shadow:0 0 50px rgba(99,102,241,.35)}
         .hero-btn-ghost{padding:14px 28px;background:transparent;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.08);border-radius:10px;font-size:14.5px;font-weight:500;cursor:pointer;text-decoration:none;transition:all .2s;letter-spacing:-.01em}
         .hero-btn-ghost:hover{color:#fff;border-color:rgba(255,255,255,.15);background:rgba(255,255,255,.03)}
+
         .hero-preview{position:relative;z-index:10;width:100%;max-width:1100px;margin:60px auto 0;padding:0 24px 80px;opacity:0;animation:fadeUp 1s ease forwards 1s}
         .hero-preview-frame{position:relative;width:100%;aspect-ratio:16/9.5;background:#0a0a12;border:1px solid rgba(255,255,255,.06);border-radius:16px;overflow:hidden;box-shadow:0 4px 60px rgba(99,102,241,.08),0 0 0 1px rgba(255,255,255,.03),inset 0 1px 0 rgba(255,255,255,.04)}
         .hero-preview-chrome{display:flex;align-items:center;gap:6px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.04);background:rgba(255,255,255,.015)}
@@ -124,6 +70,8 @@ export default function LandingPage() {
         .hero-preview-url{margin-left:12px;font-size:11px;font-family:'DM Mono',monospace;color:rgba(255,255,255,.2);letter-spacing:.02em}
         .hero-preview-body{position:relative;width:100%;height:calc(100% - 40px);display:flex;align-items:center;justify-content:center;overflow:hidden}
         .hero-preview-body img{width:100%;height:100%;object-fit:cover;object-position:top}
+
+        /* Placeholder skeleton */
         .hero-pp{width:100%;height:100%;padding:20px;display:grid;grid-template-columns:200px 1fr;gap:16px}
         .hero-pp-sb{background:rgba(255,255,255,.02);border-radius:10px;padding:16px}
         .hero-pp-ni{height:10px;background:rgba(255,255,255,.04);border-radius:4px;margin-bottom:10px;width:70%}
@@ -136,6 +84,7 @@ export default function LandingPage() {
         .hero-pp-ch{flex:1;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.03);border-radius:10px;min-height:200px;position:relative;overflow:hidden}
         .hero-pp-ch::after{content:'';position:absolute;bottom:20%;left:5%;right:5%;height:2px;background:linear-gradient(90deg,rgba(99,102,241,.1),rgba(0,229,160,.2),rgba(99,102,241,.1));border-radius:1px}
         .hero-preview-fade{position:absolute;bottom:0;left:0;right:0;height:120px;background:linear-gradient(transparent,#030306);z-index:2;pointer-events:none}
+
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         @keyframes fadeDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes shimmer{0%{background-position:0% center}100%{background-position:200% center}}
@@ -144,7 +93,10 @@ export default function LandingPage() {
       `}</style>
 
       <div className="hero">
-        <canvas ref={canvasRef} className="hero-canvas" />
+        {/* Aura animated background */}
+        <div className="aura-bg" data-alpha-mask="80">
+          <div data-us-project="bcBYZIStYXwiogchBNHO" />
+        </div>
 
         <nav className="hero-nav">
           <div className="hero-nav-brand">
@@ -191,7 +143,7 @@ export default function LandingPage() {
               <span className="hero-preview-url">www.tradevanish.com</span>
             </div>
             <div className="hero-preview-body">
-              {/* Replace placeholder with: <img src="/dashboard-preview.png" alt="Dashboard" /> */}
+              {/* Replace with: <img src="/dashboard-preview.png" alt="Dashboard" /> */}
               <div className="hero-pp">
                 <div className="hero-pp-sb">
                   <div className="hero-pp-ni act" />
