@@ -5,6 +5,12 @@ import { useEffect } from 'react';
 export default function LandingPage() {
 
   useEffect(() => {
+    // If Tradovate OAuth callback landed here, redirect to /app
+    if (typeof window !== 'undefined' && window.location.search.includes('tradovate_token')) {
+      window.location.href = '/app' + window.location.search;
+      return;
+    }
+
     // Load UnicornStudio for animated background
     if (!window.UnicornStudio) {
       window.UnicornStudio = { isInitialized: false };

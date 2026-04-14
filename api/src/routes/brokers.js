@@ -112,7 +112,7 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
 // Step 2: OAuth callback - Tradovate redirects here with ?code=XXX
 router.get('/tradovate/callback', async (req, res) => {
   const { code, error } = req.query;
-  const frontendUrl = appConfig.cors.origin || 'https://app.tradevanish.com';
+  const frontendUrl = (appConfig.cors.origin || 'https://www.tradevanish.com') + '/app';
 
   if (error || !code) {
     return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(error || 'no_code')}`);
