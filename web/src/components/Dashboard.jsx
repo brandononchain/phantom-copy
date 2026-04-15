@@ -1141,32 +1141,31 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
 
 // ─── Overview Page ───────────────────────────────────────────────────────────
 function OverviewPage({ accounts, onOpenConnect, listenerState, expandedTrade, setExpandedTrade }) {
-  const totalPnl = accounts.reduce((s, a) => s + a.pnl, 0);
-  const active = accounts.filter(a => a.status === "copying").length;
-  const healthy = accounts.filter(a => a.latency !== null && a.latency < 80).length;
+  const totalPnl = accounts.reduce((s, a) => s + (a.pnl || 0), 0);
+  const totalBalance = accounts.reduce((s, a) => s + (a.balance ? Number(a.balance) : 0), 0);
+  const followers = accounts.filter(a => a.role === "follower");
+  const active = accounts.filter(a => a.status === "copying" || a.status === "connected").length;
+  const totalTrades = accounts.reduce((s, a) => s + (a.trades || 0), 0);
   const avgLat = accounts.filter(a => a.latency).reduce((s, a) => s + a.latency, 0) / (accounts.filter(a => a.latency).length || 1);
+  const platforms = new Set(accounts.map(a => a.platform)).size;
 
   return (
     <div className="page fade-in">
       <div className="pg-head">
-        <div><h1 className="pg-title">Command Center</h1><p className="pg-sub">Real-time copy trading with IP isolation</p></div>
+        <div><h1 className="pg-title">Overview</h1><p className="pg-sub">Real-time copy trading performance across all accounts</p></div>
         <div className="pg-acts">
-          <button className="btn-ghost">Export</button>
           <button className="btn-primary" onClick={onOpenConnect}><span>+ Connect Account</span><span className="btn-aw"><span className="btn-ar">&#8594;</span></span></button>
         </div>
       </div>
 
       <div className="stats">
-        <div className="st-card"><div className="st-eye">TOTAL P&L TODAY</div><div className={cn("st-val", totalPnl >= 0 ? "c-grn" : "c-red")}><AnimNum value={Math.abs(totalPnl)} prefix={totalPnl >= 0 ? "+$" : "-$"} /></div><div className="st-sub">{accounts.reduce((s, a) => s + a.trades, 0)} trades executed</div></div>
-        <div className="st-card"><div className="st-eye">COPYING</div><div className="st-val c-blu"><AnimNum value={active} dec={0} /><span className="st-of">/{accounts.length}</span></div><div className="st-sub">{accounts.filter(a => a.status === "error").length} errors</div></div>
-        <div className="st-card"><div className="st-eye">PROXY HEALTH</div><div className="st-ring"><HealthRing ok={healthy} total={accounts.length} /></div></div>
+        <div className="st-card"><div className="st-eye">TOTAL BALANCE</div><div className="st-val c-grn">{totalBalance > 0 ? <AnimNum value={totalBalance} prefix="$" /> : <span style={{color:"var(--t3)"}}>$0.00</span>}</div><div className="st-sub">{totalPnl >= 0 ? "+" : ""}{totalPnl !== 0 ? `$${Math.abs(totalPnl).toLocaleString(undefined,{minimumFractionDigits:2})} today` : "No trades yet"}</div></div>
+        <div className="st-card"><div className="st-eye">ACTIVE FOLLOWERS</div><div className="st-val c-blu"><AnimNum value={followers.length} dec={0} /></div><div className="st-sub">across {platforms || 0} platform{platforms !== 1 ? "s" : ""}</div></div>
+        <div className="st-card"><div className="st-eye">TODAY'S TRADES</div><div className="st-val"><AnimNum value={totalTrades} dec={0} /></div><div className="st-sub">{active} accounts copying</div></div>
         <div className="st-card">
-          <div className="st-eye">LISTENER STATUS</div>
-          <div className="st-listener-status">
-            <StatusDot status={listenerState === "listening" ? "listening" : "idle"} />
-            <span className={listenerState === "listening" ? "c-grn" : "c-dim"}>{listenerState === "listening" ? "Active" : "Offline"}</span>
-          </div>
-          <div className="st-sub">{listenerState === "listening" ? "Watching master for trades" : "Start listener on Accounts page"}</div>
+          <div className="st-eye">COPY LATENCY</div>
+          <div className={cn("st-val", avgLat < 30 ? "c-grn" : avgLat < 60 ? "" : "c-red")}>{avgLat > 0 ? <><AnimNum value={Math.round(avgLat)} dec={0} /><span style={{fontSize:14,fontWeight:500,color:"var(--t3)"}}>ms</span></> : <span style={{color:"var(--t3)"}}>--</span>}</div>
+          <div className="st-sub">avg across followers</div>
         </div>
       </div>
 
