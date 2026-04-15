@@ -1046,7 +1046,7 @@ function MasterStatsBar({ accountId, balance, balanceDisplay }) {
   ];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--bdr)", borderRadius: 10, overflow: "hidden", margin: "12px 0" }}>
+    <div className="stats-bar-mobile" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--bdr)", borderRadius: 10, overflow: "hidden", margin: "12px 0" }}>
       {items.map(s => (
         <div key={s.label} style={{ background: "rgba(255,255,255,0.02)", padding: "12px 14px", textAlign: "center" }}>
           <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", color: "var(--t3)", fontFamily: "var(--sans)", marginBottom: 6 }}>{s.label}</div>
@@ -3290,6 +3290,24 @@ export default function App({ initialMode }) {
       <div className="layout">
         <Sidebar active={page} onNav={setPage} masterAccount={master} listenerState={listenerState} currentPlan={currentPlan} />
         <main className="main">{renderPage()}</main>
+
+        {/* Mobile Bottom Nav */}
+        <nav className="mob-nav">
+          <div className="mob-nav-inner">
+            {[
+              { key: "overview", label: "Overview", d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" },
+              { key: "accounts", label: "Accounts", d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+              { key: "proxies", label: "IP Mixer", d: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM2 12h20" },
+              { key: "trades", label: "Trades", d: "M22 12l-4 0-3 9-6-18-3 9-4 0" },
+              { key: "settings", label: "Settings", d: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" },
+            ].map(n => (
+              <button key={n.key} className={cn("mob-nav-btn", page === n.key && "active")} onClick={() => setPage(n.key)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d={n.d}/></svg>
+                {n.label}
+              </button>
+            ))}
+          </div>
+        </nav>
       </div>
       {showConnect && <ConnectModal onClose={() => { setShowConnect(false); setOauthResume(null); }} onConnect={addAccount} existingMaster={existingMaster} onStartListener={startListener} oauthResume={oauthResume} />}
       {showOnboarding && <OnboardingOverlay onComplete={() => { setShowOnboarding(false); setPage("accounts"); }} />}
@@ -4056,6 +4074,139 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 
 .fade-in{animation:fsu 0.6s var(--ease) both}
 
-@media(max-width:1100px){.stats{grid-template-columns:repeat(2,1fr)}.proxy-grid,.acct-grid{grid-template-columns:repeat(2,1fr)}.prov-grid{grid-template-columns:repeat(2,1fr)}.how-steps{flex-wrap:wrap}.how-arrow{display:none}.ml-ws-stats{flex-wrap:wrap;gap:12px}.tl-fills-grid{grid-template-columns:1fr}.tl-stats{flex-wrap:wrap}.tl-stat{min-width:calc(25% - 1px)}.set-grid-3{grid-template-columns:1fr 1fr}.set-grid-2{grid-template-columns:1fr}}
-@media(max-width:768px){.sidebar{display:none}.main{margin-left:0}.page{padding:24px 16px 60px}.pg-head{flex-direction:column;gap:16px}.stats,.proxy-grid,.acct-grid{grid-template-columns:1fr}.prov-grid{grid-template-columns:1fr 1fr}.pg-title{font-size:22px}.pg-acts{width:100%}.pg-acts .btn-primary{flex:1;justify-content:center}.acct-master-row{flex-direction:column;align-items:flex-start;gap:12px}.ml-head{flex-direction:column;gap:12px}.tl-stats{flex-direction:column}.tl-stat{border-right:none;border-bottom:1px solid var(--bdr)}.tl-filters{flex-direction:column;gap:10px}.tl-fills-grid{grid-template-columns:1fr}.tl-ex-summary{flex-direction:column;gap:10px}.tl-ex-sm{padding:0;border:none}.set-grid-3,.set-grid-2{grid-template-columns:1fr}.set-kill-inner{flex-direction:column;gap:16px;text-align:center}.set-kill-left{flex-direction:column;align-items:center}.set-btn-group{flex-wrap:wrap}.prof-header{flex-direction:column;align-items:flex-start;gap:16px}.prof-field-grid{grid-template-columns:1fr}.prof-plan-cards{grid-template-columns:1fr}.prof-billing-row{flex-direction:column;gap:12px}.prof-manage-billing{margin-left:0;width:100%}.bill-plans{grid-template-columns:1fr}.bill-payment{grid-template-columns:1fr}.bill-card-preview{display:none}.onb-plans{flex-direction:column}.prof-plan-active{flex-direction:column;align-items:flex-start;gap:12px}.pp-pool-grid{grid-template-columns:1fr}.pp-limits{grid-template-columns:repeat(2,1fr)}.pp-wh-event-grid{grid-template-columns:1fr}}
+/* ── Mobile bottom nav ─────────────────── */
+.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(5,5,8,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--bdr);padding:6px 0 env(safe-area-inset-bottom,6px);height:auto}
+.mob-nav-inner{display:flex;justify-content:space-around;align-items:center;max-width:500px;margin:0 auto}
+.mob-nav-btn{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--t3);font-family:var(--sans);font-size:9px;font-weight:600;letter-spacing:0.03em;padding:6px 12px;cursor:pointer;transition:color 0.2s;min-width:0}
+.mob-nav-btn svg{width:20px;height:20px;flex-shrink:0}
+.mob-nav-btn.active{color:var(--acc)}
+.mob-nav-btn.active svg{stroke:var(--acc)}
+
+/* ── Tablet (1100px) ──────────────────── */
+@media(max-width:1100px){
+.stats{grid-template-columns:repeat(2,1fr)}
+.proxy-grid,.acct-grid{grid-template-columns:repeat(2,1fr)}
+.prov-grid{grid-template-columns:repeat(2,1fr)}
+.how-steps{flex-wrap:wrap}.how-arrow{display:none}
+.ml-ws-stats{flex-wrap:wrap;gap:8px}
+.ml-ws-stat{min-width:calc(33% - 6px)}
+.tl-fills-grid{grid-template-columns:1fr}
+.tl-stats{flex-wrap:wrap}.tl-stat{min-width:calc(25% - 1px)}
+.set-grid-3{grid-template-columns:1fr 1fr}
+.set-grid-2{grid-template-columns:1fr}
+.follower-grid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* ── Mobile (768px) ───────────────────── */
+@media(max-width:768px){
+/* Layout: hide sidebar, show mobile nav */
+.sidebar{display:none}
+.mob-nav{display:block}
+.main{margin-left:0;padding:20px 16px 90px!important}
+.page{padding:0!important}
+
+/* Page headers */
+.pg-head{flex-direction:column;gap:12px;align-items:flex-start}
+.pg-title{font-size:20px}
+.pg-sub{font-size:12px}
+.pg-acts{width:100%;display:flex;gap:8px}
+.pg-acts .btn-primary,.pg-acts .btn-ghost{flex:1;justify-content:center;font-size:12px;padding:10px 12px}
+
+/* Stats cards */
+.stats{grid-template-columns:repeat(2,1fr);gap:10px}
+.st-card{padding:14px}
+.st-eye{font-size:8.5px}
+.st-val{font-size:20px}
+
+/* MasterStatsBar 6-col → 3-col on mobile */
+.stats-bar-mobile{grid-template-columns:repeat(3,1fr)!important}
+
+/* Master account row */
+.acct-master-row{flex-direction:column;align-items:flex-start;gap:10px}
+.acct-m-stat{width:100%}
+.ip-badge{align-self:flex-start}
+
+/* Listener panel */
+.ml-head{flex-direction:column;gap:8px;align-items:flex-start}
+.ml-ws-stats{flex-direction:column;gap:0}
+.ml-ws-stat{min-width:100%;border-right:none;border-bottom:1px solid var(--bdr);padding:8px 12px}
+.ml-ws-stat:last-child{border-bottom:none}
+
+/* Follower & proxy grids */
+.proxy-grid,.acct-grid,.follower-grid{grid-template-columns:1fr}
+.prov-grid{grid-template-columns:1fr 1fr}
+
+/* Trade table */
+.tbl-w{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -16px;padding:0 16px}
+.tbl{min-width:700px}
+.tl-stats{flex-direction:column;gap:0}
+.tl-stat{border-right:none;border-bottom:1px solid var(--bdr);padding:10px 12px}
+.tl-stat:last-child{border-bottom:none}
+.tl-filters{flex-direction:column;gap:8px}
+.tl-fills-grid{grid-template-columns:1fr}
+.tl-ex-summary{flex-direction:column;gap:8px}
+.tl-ex-sm{padding:0;border:none}
+
+/* Settings */
+.set-grid-3,.set-grid-2{grid-template-columns:1fr}
+.set-kill-inner{flex-direction:column;gap:12px;text-align:center}
+.set-kill-left{flex-direction:column;align-items:center}
+.set-btn-group{flex-wrap:wrap}
+.set-follower-row{padding:12px}
+
+/* Profile */
+.prof-header{flex-direction:column;align-items:flex-start;gap:12px}
+.prof-field-grid{grid-template-columns:1fr}
+.prof-plan-cards{grid-template-columns:1fr}
+.prof-billing-row{flex-direction:column;gap:10px}
+.prof-manage-billing{margin-left:0;width:100%}
+.prof-plan-active{flex-direction:column;align-items:flex-start;gap:10px}
+.bill-plans{grid-template-columns:1fr}
+.bill-payment{grid-template-columns:1fr}
+.bill-card-preview{display:none}
+
+/* Pro+ features */
+.pp-pool-grid{grid-template-columns:1fr}
+.pp-limits{grid-template-columns:repeat(2,1fr)}
+.pp-wh-event-grid{grid-template-columns:1fr}
+
+/* Modals */
+.modal-overlay{padding:0;align-items:flex-end}
+.modal-shell{width:100%!important;max-width:100%!important;max-height:90dvh;border-radius:16px 16px 0 0;margin:0}
+.modal-shell-wide{width:100%!important;max-width:100%!important}
+.modal-body{max-height:calc(90dvh - 100px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.modal-header{padding:16px}
+.modal-title{font-size:16px}
+.modal-steps{padding:8px 16px;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+.mstep-label{font-size:9px}
+.pa-options{flex-wrap:wrap;gap:6px}
+.pa-opt{font-size:11px;padding:6px 10px}
+
+/* Onboarding */
+.onb-plans{flex-direction:column;gap:10px}
+.onb-container{padding:24px 16px;max-width:100%}
+
+/* Connect modal proxy step */
+.pa-preview{gap:8px}
+.pa-pv-row{font-size:12px}
+
+/* How it works */
+.how-steps{flex-direction:column;gap:8px}
+.how-arrow{display:none}
+.how-step{padding:12px}
+
+/* Cards */
+.card-in{padding:16px}
+.card-hd{flex-wrap:wrap;gap:8px}
+}
+
+/* ── Small mobile (480px) ─────────────── */
+@media(max-width:480px){
+.stats{grid-template-columns:1fr}
+.prov-grid{grid-template-columns:1fr}
+.pp-limits{grid-template-columns:1fr}
+.px-acts{flex-direction:column;gap:6px}
+.px-btn{width:100%;text-align:center}
+.onb-plans .onb-plan{padding:12px}
+}
 `;
