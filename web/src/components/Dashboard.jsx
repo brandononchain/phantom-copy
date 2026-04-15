@@ -3294,18 +3294,26 @@ export default function App({ initialMode }) {
         {/* Mobile Bottom Nav */}
         <nav className="mob-nav">
           <div className="mob-nav-inner">
-            {[
-              { key: "overview", label: "Overview", d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" },
-              { key: "accounts", label: "Accounts", d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
-              { key: "proxies", label: "IP Mixer", d: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM2 12h20" },
-              { key: "trades", label: "Trades", d: "M22 12l-4 0-3 9-6-18-3 9-4 0" },
-              { key: "settings", label: "Settings", d: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" },
-            ].map(n => (
-              <button key={n.key} className={cn("mob-nav-btn", page === n.key && "active")} onClick={() => setPage(n.key)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d={n.d}/></svg>
-                {n.label}
-              </button>
-            ))}
+            <button className={cn("mob-nav-btn", page === "overview" && "active")} onClick={() => setPage("overview")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              <span>Home</span>
+            </button>
+            <button className={cn("mob-nav-btn", page === "accounts" && "active")} onClick={() => setPage("accounts")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>Accounts</span>
+            </button>
+            <button className={cn("mob-nav-btn", page === "proxies" && "active")} onClick={() => setPage("proxies")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <span>Proxies</span>
+            </button>
+            <button className={cn("mob-nav-btn", page === "trades" && "active")} onClick={() => setPage("trades")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <span>Trades</span>
+            </button>
+            <button className={cn("mob-nav-btn", page === "profile" && "active")} onClick={() => setPage("profile")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Profile</span>
+            </button>
           </div>
         </nav>
       </div>
@@ -4075,12 +4083,14 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .fade-in{animation:fsu 0.6s var(--ease) both}
 
 /* ── Mobile bottom nav ─────────────────── */
-.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(5,5,8,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--bdr);padding:6px 0 env(safe-area-inset-bottom,6px);height:auto}
-.mob-nav-inner{display:flex;justify-content:space-around;align-items:center;max-width:500px;margin:0 auto}
-.mob-nav-btn{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--t3);font-family:var(--sans);font-size:9px;font-weight:600;letter-spacing:0.03em;padding:6px 12px;cursor:pointer;transition:color 0.2s;min-width:0}
-.mob-nav-btn svg{width:20px;height:20px;flex-shrink:0}
+.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(5,5,8,0.97);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-top:1px solid rgba(255,255,255,0.08);padding-bottom:env(safe-area-inset-bottom,0px)}
+.mob-nav-inner{display:flex;align-items:stretch;justify-content:space-around;height:56px;max-width:480px;margin:0 auto;padding:0 4px}
+.mob-nav-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:1;background:none;border:none;color:rgba(255,255,255,0.3);font-family:var(--sans);font-size:10px;font-weight:500;letter-spacing:0.01em;cursor:pointer;transition:color 0.2s;padding:0;-webkit-tap-highlight-color:transparent;position:relative}
+.mob-nav-btn svg{width:22px;height:22px;flex-shrink:0;transition:all 0.2s}
+.mob-nav-btn span{line-height:1}
 .mob-nav-btn.active{color:var(--acc)}
 .mob-nav-btn.active svg{stroke:var(--acc)}
+.mob-nav-btn.active::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:2px;background:var(--acc);border-radius:0 0 2px 2px}
 
 /* ── Tablet (1100px) ──────────────────── */
 @media(max-width:1100px){
@@ -4102,7 +4112,7 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 /* Layout: hide sidebar, show mobile nav */
 .sidebar{display:none}
 .mob-nav{display:block}
-.main{margin-left:0;padding:20px 16px 90px!important}
+.main{margin-left:0;padding:16px 16px calc(72px + env(safe-area-inset-bottom,0px))!important}
 .page{padding:0!important}
 
 /* Page headers */
@@ -4171,24 +4181,34 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .pp-wh-event-grid{grid-template-columns:1fr}
 
 /* Modals */
-.modal-overlay{padding:0;align-items:flex-end}
-.modal-shell{width:100%!important;max-width:100%!important;max-height:90dvh;border-radius:16px 16px 0 0;margin:0}
+.modal-overlay{padding:0;align-items:flex-end;justify-content:flex-end}
+.modal-shell{width:100%!important;max-width:100%!important;max-height:92dvh;border-radius:20px 20px 0 0;margin:0;border-bottom:none}
 .modal-shell-wide{width:100%!important;max-width:100%!important}
-.modal-body{max-height:calc(90dvh - 100px);overflow-y:auto;-webkit-overflow-scrolling:touch}
-.modal-header{padding:16px}
+.modal-shell::before{content:'';display:block;width:36px;height:4px;background:rgba(255,255,255,0.15);border-radius:2px;margin:8px auto 0}
+.modal-body{max-height:calc(92dvh - 120px);overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom,16px)}
+.modal-header{padding:12px 16px 8px}
 .modal-title{font-size:16px}
-.modal-steps{padding:8px 16px;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
-.mstep-label{font-size:9px}
+.modal-sub{font-size:11px}
+.modal-steps{padding:6px 12px;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+.mstep{padding:4px 8px}
+.mstep-label{font-size:8px}
+.mstep-dot{width:16px;height:16px;font-size:8px}
 .pa-options{flex-wrap:wrap;gap:6px}
-.pa-opt{font-size:11px;padding:6px 10px}
+.pa-opt{font-size:12px;padding:10px 14px;min-height:40px}
+
+/* Inputs: 16px font prevents iOS zoom */
+.auth-input,.set-input{font-size:16px!important}
+.btn-primary,.btn-ghost,.btn-full{min-height:44px}
 
 /* Onboarding */
 .onb-plans{flex-direction:column;gap:10px}
 .onb-container{padding:24px 16px;max-width:100%}
+.onb-title{font-size:20px}
 
 /* Connect modal proxy step */
 .pa-preview{gap:8px}
-.pa-pv-row{font-size:12px}
+.pa-pv-row{font-size:12px;flex-wrap:wrap}
+.pa-pv-val{word-break:break-all}
 
 /* How it works */
 .how-steps{flex-direction:column;gap:8px}
@@ -4198,15 +4218,37 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 /* Cards */
 .card-in{padding:16px}
 .card-hd{flex-wrap:wrap;gap:8px}
+.card-t{font-size:14px}
+
+/* Auth screen */
+.auth-screen{padding:20px 16px}
+.auth-screen-inner{width:100%}
+.auth-screen-title{font-size:24px}
+
+/* Expand rows */
+.expand-fill{flex-wrap:wrap;gap:4px}
+.ef-name{min-width:100%}
+
+/* Proxy cards */
+.px-inner{padding:14px}
+.px-ip-box{flex-wrap:wrap}
+.px-meta{flex-wrap:wrap;gap:12px}
+.px-acts{gap:8px}
+.px-btn{font-size:12px;padding:8px 12px;min-height:40px}
 }
 
 /* ── Small mobile (480px) ─────────────── */
 @media(max-width:480px){
 .stats{grid-template-columns:1fr}
+.stats-bar-mobile{grid-template-columns:repeat(2,1fr)!important}
 .prov-grid{grid-template-columns:1fr}
 .pp-limits{grid-template-columns:1fr}
 .px-acts{flex-direction:column;gap:6px}
 .px-btn{width:100%;text-align:center}
 .onb-plans .onb-plan{padding:12px}
+.pg-title{font-size:18px}
+.st-val{font-size:18px}
+.mob-nav-btn{font-size:9px}
+.mob-nav-btn svg{width:20px;height:20px}
 }
 `;

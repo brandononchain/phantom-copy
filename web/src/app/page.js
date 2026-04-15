@@ -95,7 +95,7 @@ export default function LandingPage() {
         @keyframes fadeDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes shimmer{0%{background-position:0% center}100%{background-position:200% center}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-        @media(max-width:768px){.hero-content{padding-top:60px}.hero-nav-links a:not(.hero-nav-cta){display:none}.hero-actions{flex-direction:column;width:100%;padding:0 20px}.hero-btn-primary,.hero-btn-ghost{width:100%;text-align:center}.hero-pp{grid-template-columns:1fr}.hero-pp-sb{display:none}.hero-pp-sr{grid-template-columns:repeat(2,1fr)}}
+        @media(max-width:768px){.hero-content{padding-top:48px}.hero-nav{padding:16px 20px}.hero-nav-links a:not(.hero-nav-cta){display:none}.hero-h1{font-size:clamp(32px,8vw,42px);margin-bottom:16px}.hero-sub{font-size:15px;margin-bottom:28px;max-width:100%;padding:0 8px}.hero-actions{flex-direction:column;width:100%;padding:0 20px;gap:10px}.hero-btn-primary,.hero-btn-ghost{width:100%;text-align:center;padding:16px 24px;font-size:15px;min-height:48px}.hero-preview{margin-top:36px;padding:0 16px 40px}.hero-preview-frame{border-radius:12px}.hero-pp{grid-template-columns:1fr}.hero-pp-sb{display:none}.hero-pp-sr{grid-template-columns:repeat(2,1fr)}.hero-badge{font-size:11px}}
       `}</style>
 
       <div className="hero">
