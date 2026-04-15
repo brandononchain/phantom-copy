@@ -4082,20 +4082,20 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 
 .fade-in{animation:fsu 0.6s var(--ease) both}
 
-/* ── Mobile bottom nav ─────────────────── */
-.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(5,5,8,0.97);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-top:1px solid rgba(255,255,255,0.08);padding-bottom:env(safe-area-inset-bottom,0px)}
-.mob-nav-inner{display:flex;align-items:stretch;justify-content:space-around;height:56px;max-width:480px;margin:0 auto;padding:0 4px}
-.mob-nav-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:1;background:none;border:none;color:rgba(255,255,255,0.3);font-family:var(--sans);font-size:10px;font-weight:500;letter-spacing:0.01em;cursor:pointer;transition:color 0.2s;padding:0;-webkit-tap-highlight-color:transparent;position:relative}
-.mob-nav-btn svg{width:22px;height:22px;flex-shrink:0;transition:all 0.2s}
+/* ── Mobile Tab Bar ────────────────────── */
+.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(8,8,12,0.96);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-top:1px solid rgba(255,255,255,0.06)}
+.mob-nav-inner{display:flex;align-items:stretch;height:52px;padding:0 8px}
+.mob-nav-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;flex:1;background:none;border:none;color:rgba(255,255,255,0.25);font-family:var(--sans);font-size:10px;font-weight:500;letter-spacing:0.02em;padding:4px 0 2px;cursor:pointer;-webkit-tap-highlight-color:transparent;position:relative;transition:color 0.15s}
+.mob-nav-btn svg{width:20px;height:20px;flex-shrink:0;stroke-width:1.5}
 .mob-nav-btn span{line-height:1}
-.mob-nav-btn.active{color:var(--acc)}
+.mob-nav-btn.active{color:#fff}
 .mob-nav-btn.active svg{stroke:var(--acc)}
-.mob-nav-btn.active::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:2px;background:var(--acc);border-radius:0 0 2px 2px}
+.mob-nav-btn.active::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:20px;height:2px;background:var(--acc);border-radius:0 0 4px 4px}
 
-/* ── Tablet (1100px) ──────────────────── */
+/* ── Tablet ≤1100px ───────────────────── */
 @media(max-width:1100px){
 .stats{grid-template-columns:repeat(2,1fr)}
-.proxy-grid,.acct-grid{grid-template-columns:repeat(2,1fr)}
+.proxy-grid,.acct-grid,.follower-grid{grid-template-columns:repeat(2,1fr)}
 .prov-grid{grid-template-columns:repeat(2,1fr)}
 .how-steps{flex-wrap:wrap}.how-arrow{display:none}
 .ml-ws-stats{flex-wrap:wrap;gap:8px}
@@ -4104,151 +4104,252 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .tl-stats{flex-wrap:wrap}.tl-stat{min-width:calc(25% - 1px)}
 .set-grid-3{grid-template-columns:1fr 1fr}
 .set-grid-2{grid-template-columns:1fr}
-.follower-grid{grid-template-columns:repeat(2,1fr)}
 }
 
-/* ── Mobile (768px) ───────────────────── */
+/* ══════════════════════════════════════════
+   MOBILE APP LAYOUT ≤768px
+   Designed as native mobile app experience.
+   Every element is sized for touch, optimized
+   for 375px-428px viewport width.
+   ══════════════════════════════════════════ */
 @media(max-width:768px){
-/* Layout: hide sidebar, show mobile nav */
+
+/* ── Core Layout ──────────────────────── */
 .sidebar{display:none}
-.mob-nav{display:block}
-.main{margin-left:0;padding:16px 16px calc(72px + env(safe-area-inset-bottom,0px))!important}
-.page{padding:0!important}
+.mob-nav{display:block;padding-bottom:env(safe-area-inset-bottom,0px)}
+.layout{display:flex;flex-direction:column}
+.main{margin-left:0!important;padding:0!important;min-height:calc(100dvh - 52px - env(safe-area-inset-bottom,0px))}
+.page{padding:16px 16px calc(64px + env(safe-area-inset-bottom,0px))!important;max-width:100%!important}
 
-/* Page headers */
-.pg-head{flex-direction:column;gap:12px;align-items:flex-start}
-.pg-title{font-size:20px}
-.pg-sub{font-size:12px}
+/* ── Page Header ──────────────────────── */
+.pg-head{flex-direction:column;gap:10px;align-items:flex-start;margin-bottom:20px}
+.pg-title{font-size:22px}
+.pg-sub{font-size:12px;color:var(--t3)}
 .pg-acts{width:100%;display:flex;gap:8px}
-.pg-acts .btn-primary,.pg-acts .btn-ghost{flex:1;justify-content:center;font-size:12px;padding:10px 12px}
+.pg-acts .btn-primary,.pg-acts .btn-ghost{flex:1;justify-content:center;padding:10px 12px;font-size:13px;min-height:44px}
 
-/* Stats cards */
-.stats{grid-template-columns:repeat(2,1fr);gap:10px}
-.st-card{padding:14px}
-.st-eye{font-size:8.5px}
-.st-val{font-size:20px}
+/* ── Stat Cards ───────────────────────── */
+.stats{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px}
+.st-card{padding:12px 14px;border-radius:14px}
+.st-eye{font-size:9px;letter-spacing:0.08em;margin-bottom:6px}
+.st-val{font-size:22px}
+.st-sub{font-size:10px;margin-top:3px}
+.st-of{font-size:12px}
+.st-ring{transform:scale(0.85);transform-origin:center}
 
-/* MasterStatsBar 6-col → 3-col on mobile */
+/* ── Master Stats Bar (6→3 cols) ──────── */
 .stats-bar-mobile{grid-template-columns:repeat(3,1fr)!important}
 
-/* Master account row */
-.acct-master-row{flex-direction:column;align-items:flex-start;gap:10px}
-.acct-m-stat{width:100%}
-.ip-badge{align-self:flex-start}
+/* ── Cards ─────────────────────────────── */
+.card-sh{margin-bottom:12px;border-radius:16px}
+.card-in{padding:14px!important;border-radius:16px}
+.card-hd{margin-bottom:14px;flex-wrap:wrap;gap:6px}
+.card-t{font-size:14px}
+.badge{font-size:8px;padding:2px 6px;border-radius:4px}
 
-/* Listener panel */
-.ml-head{flex-direction:column;gap:8px;align-items:flex-start}
-.ml-ws-stats{flex-direction:column;gap:0}
-.ml-ws-stat{min-width:100%;border-right:none;border-bottom:1px solid var(--bdr);padding:8px 12px}
+/* ── Master Account Row ───────────────── */
+.acct-master-row{flex-direction:column;align-items:stretch;gap:10px}
+.acct-m-info{width:100%}
+.acct-m-name{font-size:14px}
+.acct-m-stat{display:flex;align-items:center;justify-content:space-between;width:100%}
+.ip-badge{font-size:10px;padding:3px 8px}
+
+/* ── Listener Panel ───────────────────── */
+.listener-panel{padding:12px;margin-top:8px;border-radius:12px}
+.ml-head{flex-direction:column;gap:6px;align-items:flex-start}
+.ml-ws-stats{flex-direction:column;gap:0;border-radius:10px}
+.ml-ws-stat{min-width:100%!important;border-right:none!important;border-bottom:1px solid var(--bdr);padding:8px 10px;flex-direction:row;justify-content:space-between;display:flex;align-items:center}
 .ml-ws-stat:last-child{border-bottom:none}
+.ml-ws-stat-label{font-size:9px;margin-bottom:0}
+.ml-ws-stat-val{font-size:11px}
 
-/* Follower & proxy grids */
-.proxy-grid,.acct-grid,.follower-grid{grid-template-columns:1fr}
-.prov-grid{grid-template-columns:1fr 1fr}
+/* ── Follower / Proxy Grid ────────────── */
+.proxy-grid,.acct-grid,.follower-grid{grid-template-columns:1fr;gap:8px}
+.prov-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+.px-inner{padding:12px}
+.px-top{margin-bottom:8px}
+.px-name{font-size:12px}
+.px-prov{font-size:9px}
+.px-ip{font-size:11px}
+.px-region{font-size:10px}
+.px-meta{flex-wrap:wrap;gap:8px}
+.px-ml{font-size:8px}
+.px-acts{gap:6px;margin-top:10px}
+.px-btn{font-size:11px;padding:8px 10px;min-height:38px;border-radius:8px}
 
-/* Trade table */
-.tbl-w{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -16px;padding:0 16px}
-.tbl{min-width:700px}
+/* ── Follower Cards ───────────────────── */
+.f-card{padding:12px;border-radius:12px}
+.f-head{margin-bottom:8px}
+.f-name{font-size:12px}
+.f-stats{font-size:10px}
+
+/* ── How It Works ─────────────────────── */
+.how-shell{margin-bottom:16px}
+.how-inner{padding:14px}
+.how-title{font-size:12px;margin-bottom:10px}
+.how-steps{flex-direction:column;gap:6px}
+.how-arrow{display:none}
+.how-step{padding:10px;border-radius:10px}
+.how-num{width:24px;height:24px;font-size:10px}
+
+/* ── Trade Table ──────────────────────── */
+.tbl-w{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -14px;padding:0 14px}
+.tbl{min-width:640px}
+.tbl th{font-size:8px;padding:6px 8px}
+.tbl td{font-size:11px;padding:8px}
 .tl-stats{flex-direction:column;gap:0}
-.tl-stat{border-right:none;border-bottom:1px solid var(--bdr);padding:10px 12px}
+.tl-stat{border-right:none;border-bottom:1px solid var(--bdr);padding:8px 10px}
 .tl-stat:last-child{border-bottom:none}
-.tl-filters{flex-direction:column;gap:8px}
+.tl-filters{flex-direction:column;gap:6px}
 .tl-fills-grid{grid-template-columns:1fr}
-.tl-ex-summary{flex-direction:column;gap:8px}
+.tl-ex-summary{flex-direction:column;gap:6px}
 .tl-ex-sm{padding:0;border:none}
+.expand-fill{flex-wrap:wrap;gap:4px;padding:6px 0}
+.ef-name{min-width:100%;font-size:11px}
 
-/* Settings */
+/* ── Settings ─────────────────────────── */
 .set-grid-3,.set-grid-2{grid-template-columns:1fr}
+.set-field{margin-bottom:12px}
+.set-label{font-size:9px}
+.set-input{font-size:16px!important;padding:10px 12px!important;border-radius:10px;min-height:44px}
+.set-help{font-size:11px}
 .set-kill-inner{flex-direction:column;gap:12px;text-align:center}
 .set-kill-left{flex-direction:column;align-items:center}
-.set-btn-group{flex-wrap:wrap}
-.set-follower-row{padding:12px}
+.set-btn-group{flex-wrap:wrap;gap:4px}
+.set-follower-row{padding:10px;border-radius:10px}
+.set-f-head{padding:8px}
+.set-radio-group{flex-wrap:wrap;gap:4px}
+.set-radio{font-size:11px;padding:6px 10px;min-height:36px}
 
-/* Profile */
-.prof-header{flex-direction:column;align-items:flex-start;gap:12px}
-.prof-field-grid{grid-template-columns:1fr}
-.prof-plan-cards{grid-template-columns:1fr}
-.prof-billing-row{flex-direction:column;gap:10px}
+/* ── Profile ──────────────────────────── */
+.prof-header{flex-direction:column;align-items:flex-start;gap:10px}
+.prof-avatar{width:48px;height:48px;border-radius:12px}
+.prof-avatar-text{font-size:18px}
+.prof-header-name{font-size:18px}
+.prof-field-grid{grid-template-columns:1fr;gap:10px}
+.prof-field label{font-size:10px}
+.prof-field input,.prof-field select{font-size:16px!important;min-height:44px}
+.prof-plan-cards{grid-template-columns:1fr;gap:8px}
+.prof-plan-active{flex-direction:column;align-items:flex-start;gap:8px;padding:14px}
+.prof-plan-active-name{font-size:18px}
+.prof-plan-active-price{font-size:24px}
+.prof-billing-row{flex-direction:column;gap:8px}
 .prof-manage-billing{margin-left:0;width:100%}
-.prof-plan-active{flex-direction:column;align-items:flex-start;gap:10px}
-.bill-plans{grid-template-columns:1fr}
-.bill-payment{grid-template-columns:1fr}
-.bill-card-preview{display:none}
+.prof-edit-actions{flex-direction:column;gap:6px}
+.prof-edit-actions .btn-primary,.prof-edit-actions .btn-ghost{width:100%;justify-content:center;min-height:44px}
 
-/* Pro+ features */
+/* ── Pro+ Features ────────────────────── */
 .pp-pool-grid{grid-template-columns:1fr}
 .pp-limits{grid-template-columns:repeat(2,1fr)}
 .pp-wh-event-grid{grid-template-columns:1fr}
+.pp-locked-card .card-in{padding:14px!important}
 
-/* Modals */
-.modal-overlay{padding:0;align-items:flex-end;justify-content:flex-end}
-.modal-shell{width:100%!important;max-width:100%!important;max-height:92dvh;border-radius:20px 20px 0 0;margin:0;border-bottom:none}
-.modal-shell-wide{width:100%!important;max-width:100%!important}
-.modal-shell::before{content:'';display:block;width:36px;height:4px;background:rgba(255,255,255,0.15);border-radius:2px;margin:8px auto 0}
-.modal-body{max-height:calc(92dvh - 120px);overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom,16px)}
-.modal-header{padding:12px 16px 8px}
-.modal-title{font-size:16px}
+/* ── Modals (Bottom Sheet) ────────────── */
+.modal-overlay{padding:0!important;align-items:flex-end!important;justify-content:flex-end!important}
+.modal-shell,.modal-shell-wide{width:100%!important;max-width:100%!important;max-height:92dvh;border-radius:20px 20px 0 0!important;margin:0!important;border-bottom:none}
+.modal-shell::before{content:'';display:block;width:32px;height:4px;background:rgba(255,255,255,0.12);border-radius:2px;margin:10px auto 4px;flex-shrink:0}
+.modal-header{padding:10px 16px 6px}
+.modal-title{font-size:17px}
 .modal-sub{font-size:11px}
+.modal-body{max-height:calc(92dvh - 110px);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding:0 16px 16px}
+.modal-body::-webkit-scrollbar{display:none}
 .modal-steps{padding:6px 12px;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
-.mstep{padding:4px 8px}
-.mstep-label{font-size:8px}
+.mstep{padding:4px 6px}
+.mstep-label{font-size:8px;white-space:nowrap}
 .mstep-dot{width:16px;height:16px;font-size:8px}
+
+/* ── Connect Flow (Mobile) ────────────── */
 .pa-options{flex-wrap:wrap;gap:6px}
-.pa-opt{font-size:12px;padding:10px 14px;min-height:40px}
-
-/* Inputs: 16px font prevents iOS zoom */
-.auth-input,.set-input{font-size:16px!important}
-.btn-primary,.btn-ghost,.btn-full{min-height:44px}
-
-/* Onboarding */
-.onb-plans{flex-direction:column;gap:10px}
-.onb-container{padding:24px 16px;max-width:100%}
-.onb-title{font-size:20px}
-
-/* Connect modal proxy step */
-.pa-preview{gap:8px}
-.pa-pv-row{font-size:12px;flex-wrap:wrap}
+.pa-opt{font-size:12px;padding:10px 14px;min-height:40px;border-radius:10px}
+.pa-section{margin-bottom:16px}
+.pa-label{font-size:9px;margin-bottom:6px}
+.pa-preview{padding:12px;border-radius:10px}
+.pa-pv-row{font-size:12px;padding:6px 0}
 .pa-pv-val{word-break:break-all}
+.proxy-assign{padding:0}
+.auth-field{margin-bottom:12px}
+.auth-field label{font-size:10px;margin-bottom:4px}
+.auth-input{font-size:16px!important;padding:12px!important;border-radius:10px;min-height:44px}
+.auth-check{margin:16px 0}
+.btn-primary,.btn-ghost{min-height:44px;border-radius:10px}
+.btn-full{width:100%}
 
-/* How it works */
-.how-steps{flex-direction:column;gap:8px}
-.how-arrow{display:none}
-.how-step{padding:12px}
+/* ── Platform Select Cards (Mobile) ───── */
+.plat-grid{grid-template-columns:1fr!important;gap:8px}
 
-/* Cards */
-.card-in{padding:16px}
-.card-hd{flex-wrap:wrap;gap:8px}
-.card-t{font-size:14px}
+/* ── Account Select (Mobile) ──────────── */
+.sa-list{gap:8px}
+.sa-item{padding:12px;border-radius:10px}
+.sa-balance{font-size:13px}
+.sa-confirm{padding:12px;border-radius:10px}
+.sa-confirm-item{padding:6px 0}
 
-/* Auth screen */
-.auth-screen{padding:20px 16px}
-.auth-screen-inner{width:100%}
-.auth-screen-title{font-size:24px}
+/* ── Launch Panel (Mobile) ────────────── */
+.launch-panel{padding:0}
+.launch-stages{gap:6px}
+.ls-row{padding:8px 10px;border-radius:8px}
+.ls-label{font-size:12px}
+.ls-detail{font-size:10px}
+.launch-log{border-radius:10px;max-height:160px}
+.launch-log-header{padding:8px 10px}
+.ll-entry{font-size:10px;padding:3px 10px}
+.launch-ready{padding:16px 12px}
+.launch-ready-title{font-size:15px}
+.launch-ready-sub{font-size:11px}
 
-/* Expand rows */
-.expand-fill{flex-wrap:wrap;gap:4px}
-.ef-name{min-width:100%}
+/* ── Billing Modal (Mobile) ───────────── */
+.bill-plans{grid-template-columns:1fr;gap:8px}
+.bill-plan{padding:14px;border-radius:12px}
+.bill-plan-name{font-size:14px}
+.bill-plan-price{font-size:24px}
+.bill-payment{grid-template-columns:1fr}
+.bill-card-preview{display:none}
+.bill-success{padding:20px}
 
-/* Proxy cards */
-.px-inner{padding:14px}
-.px-ip-box{flex-wrap:wrap}
-.px-meta{flex-wrap:wrap;gap:12px}
-.px-acts{gap:8px}
-.px-btn{font-size:12px;padding:8px 12px;min-height:40px}
+/* ── Onboarding (Mobile) ─────────────── */
+.onb-overlay{padding:16px}
+.onb-container{padding:20px 16px;max-width:100%;border-radius:16px}
+.onb-title{font-size:20px}
+.onb-sub{font-size:12px}
+.onb-body{font-size:12px}
+.onb-plans{flex-direction:column;gap:8px}
+.onb-plan{padding:10px 12px;border-radius:10px}
+.onb-plan-name{font-size:13px}
+.onb-plan-price{font-size:16px}
+.onb-items .onb-item{padding:10px 0}
+
+/* ── Auth Screen (Mobile) ─────────────── */
+.auth-screen{padding:24px 16px;align-items:flex-start;padding-top:60px}
+.auth-screen-inner{width:100%;max-width:100%}
+.auth-screen-brand{margin-bottom:28px}
+.auth-screen-title{font-size:26px}
+.auth-screen-sub{font-size:12px}
+.auth-screen-tabs{width:100%}
+.auth-screen-tab{font-size:12px;padding:10px 0;min-height:40px}
+.auth-screen-error{font-size:11px;padding:8px 10px;border-radius:8px}
+.set-field .set-input{font-size:16px!important}
 }
 
-/* ── Small mobile (480px) ─────────────── */
+/* ══════════════════════════════════════════
+   SMALL MOBILE ≤480px (iPhone SE, etc.)
+   ══════════════════════════════════════════ */
 @media(max-width:480px){
-.stats{grid-template-columns:1fr}
+.stats{grid-template-columns:1fr;gap:6px}
 .stats-bar-mobile{grid-template-columns:repeat(2,1fr)!important}
+.st-val{font-size:20px}
 .prov-grid{grid-template-columns:1fr}
 .pp-limits{grid-template-columns:1fr}
-.px-acts{flex-direction:column;gap:6px}
-.px-btn{width:100%;text-align:center}
-.onb-plans .onb-plan{padding:12px}
+.px-acts{flex-direction:column;gap:4px}
+.px-btn{width:100%;justify-content:center}
 .pg-title{font-size:18px}
-.st-val{font-size:18px}
-.mob-nav-btn{font-size:9px}
-.mob-nav-btn svg{width:20px;height:20px}
+.mob-nav-btn svg{width:18px;height:18px}
+.mob-nav-btn{font-size:9px;gap:1px}
+.mob-nav-inner{height:48px}
+.page{padding:12px 12px calc(56px + env(safe-area-inset-bottom,0px))!important}
+.card-in{padding:12px!important}
+.prof-plan-active-price{font-size:20px}
+.modal-body{padding:0 12px 12px}
+.set-follower-row{padding:8px}
+.onb-container{padding:16px 12px}
 }
 `;
