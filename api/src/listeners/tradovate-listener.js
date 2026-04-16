@@ -9,11 +9,12 @@
 //   5. Fans out every master trade to follower accounts
 //   6. Each follower order routes through its own proxy IP
 //
-// Supports: Tradovate (WebSocket + REST) and Rithmic (R|Protocol + Protobuf)
+// Supports: Tradovate (WebSocket + REST)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import WebSocket from 'ws';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import { ProxyAgent, fetch as undiFetch } from 'undici';
 import { EventEmitter } from 'events';
 import crypto from 'crypto';
 
@@ -73,7 +74,8 @@ export class TradovateMasterListener extends EventEmitter {
     this.accessToken = accessToken;
     this.userId = userId;
     this.accountId = accountId; // Tradovate account ID (number)
-    this.proxyAgent = createProxyAgent(proxyConfig);
+    this.wsProxyAgent = createProxyAgent(proxyConfig); // For ws library
+    this.httpProxyAgent = this.createUnidiciAgent(proxyConfig); // For REST calls via undici
     this.db = db;
     this.ws = null;
     this.requestId = 1;
@@ -87,6 +89,12 @@ export class TradovateMasterListener extends EventEmitter {
     this.tokenRefreshInterval = null;
   }
 
+  createUnidiciAgent(proxyConfig) {
+    if (!proxyConfig || proxyConfig.host === 'direct') return null;
+    const url = `http://${proxyConfig.username}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+    return new ProxyAgent(url);
+  }
+
   // ── Stage 1: Connect through proxy ──────────────────────────────────────
 
   async start() {
@@ -94,10 +102,9 @@ export class TradovateMasterListener extends EventEmitter {
 
     try {
       // Verify proxy is working before connecting to broker
-      const proxyCheck = await fetch('https://api.ipify.org?format=json', {
-        agent: this.proxyAgent,
-        signal: AbortSignal.timeout(10000),
-      });
+      const ipOpts = { signal: AbortSignal.timeout(10000) };
+      if (this.httpProxyAgent) ipOpts.dispatcher = this.httpProxyAgent;
+      const proxyCheck = await undiFetch('https://api.ipify.org?format=json', ipOpts);
       const { ip } = await proxyCheck.json();
       this.emit('proxy-verified', { ip });
 
@@ -140,7 +147,7 @@ export class TradovateMasterListener extends EventEmitter {
   connectWebSocket() {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(TRADOVATE_WS_URL, {
-        agent: this.proxyAgent, // All traffic routed through dedicated IP
+        agent: this.wsProxyAgent, // All traffic routed through dedicated IP
         headers: {
           'User-Agent': 'Tradevanish/1.0',
         },
@@ -403,6 +410,7 @@ export class TradovateMasterListener extends EventEmitter {
       qty: Math.abs(delta),
       price: pos.netPrice,
       timestamp: Date.now(),
+      platform: 'tradovate',
       masterAccountId: this.accountId,
       prevPosition: prevPos || null,
       newPosition: newQty === 0 ? null : this.positions.get(pos.contractId),
@@ -510,15 +518,17 @@ export class TradovateMasterListener extends EventEmitter {
   // ── REST API calls (through proxy) ──────────────────────────────────────
 
   async apiRequest(method, path, body) {
-    const response = await fetch(`${TRADOVATE_API_URL}${path}`, {
+    const opts = {
       method,
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
         'Content-Type': 'application/json',
       },
       body: body ? JSON.stringify(body) : undefined,
-      agent: this.proxyAgent,
-    });
+    };
+    if (this.httpProxyAgent) opts.dispatcher = this.httpProxyAgent;
+
+    const response = await undiFetch(`${TRADOVATE_API_URL}${path}`, opts);
 
     if (!response.ok) {
       throw new Error(`Tradovate API ${method} ${path}: ${response.status}`);

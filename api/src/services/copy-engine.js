@@ -8,6 +8,7 @@
 import { EventEmitter } from 'events';
 import { query } from '../db/pool.js';
 import { ProjectXCopyClient } from '../listeners/projectx-listener.js';
+import { RithmicCopyClient } from '../listeners/rithmic-listener.js';
 import { createProxyAgent } from './proxy-provider.js';
 import { deliverWebhook } from './webhook-delivery.js';
 
@@ -344,12 +345,22 @@ export class CopyEngine extends EventEmitter {
         }
       };
     } else if (follower.platform === 'rithmic') {
-      // Rithmic placeholder - requires WebSocket protocol
-      client = {
-        async placeOrder() {
-          throw new Error('Rithmic copy execution requires active WebSocket session');
-        }
-      };
+      // Rithmic requires a persistent WebSocket connection per follower
+      const { HttpsProxyAgent } = await import('https-proxy-agent');
+      let wsAgent = null;
+      if (pa && pa.proxy_url) {
+        wsAgent = new HttpsProxyAgent(pa.proxy_url);
+      } else if (pa && pa.host) {
+        const url = `http://${pa.proxy_username}:${pa.proxy_password}@${pa.host}:${pa.port}`;
+        wsAgent = new HttpsProxyAgent(url);
+      }
+      client = new RithmicCopyClient({
+        username: creds.username,
+        password: creds.password,
+        accountId: follower.broker_account_id,
+        environment: creds.environment || 'Rithmic Paper Trading',
+        proxyAgent: wsAgent,
+      });
     } else {
       throw new Error(`Unknown platform: ${follower.platform}`);
     }
@@ -373,8 +384,8 @@ export class CopyEngine extends EventEmitter {
       const followers = await query(
         `SELECT a.*, pa.ip_address FROM accounts a
          LEFT JOIN proxy_assignments pa ON pa.account_id = a.id
-         WHERE a.user_id = $1 AND a.role = 'follower' AND a.platform = $2 AND a.status = 'connected'`,
-        [master.rows[0].user_id, master.rows[0].platform]
+         WHERE a.user_id = $1 AND a.role = 'follower' AND a.status = 'connected'`,
+        [master.rows[0].user_id]
       );
 
       for (const follower of followers.rows) {

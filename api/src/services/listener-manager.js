@@ -8,6 +8,8 @@
 
 import { query } from '../db/pool.js';
 import { ProjectXMasterListener } from '../listeners/projectx-listener.js';
+import { TradovateMasterListener } from '../listeners/tradovate-listener.js';
+import { RithmicMasterListener } from '../listeners/rithmic-listener.js';
 import { assignProxy, createProxyAgent, checkProxyHealth } from './proxy-provider.js';
 import { copyEngine } from './copy-engine.js';
 
@@ -57,6 +59,25 @@ class ListenerManager {
         username: credentials.username,
         apiKey: credentials.apiKey,
         accountId: parseInt(credentials.brokerAccountId),
+        proxyConfig: proxyConfig || { host: 'direct', port: 0, username: '', password: '' },
+        db: { query },
+      });
+    } else if (platform === 'tradovate' || platform === 'ninjatrader') {
+      listener = new TradovateMasterListener({
+        accessToken: credentials.token,
+        userId: parseInt(credentials.userId || credentials.brokerAccountId),
+        accountId: parseInt(credentials.brokerAccountId),
+        proxyConfig: proxyConfig || { host: 'direct', port: 0, username: '', password: '' },
+        db: { query },
+      });
+    } else if (platform === 'rithmic') {
+      listener = new RithmicMasterListener({
+        username: credentials.username,
+        password: credentials.password,
+        fcmId: credentials.fcmId || '',
+        ibId: credentials.ibId || '',
+        environment: credentials.environment || 'Rithmic Paper Trading',
+        accountId: credentials.brokerAccountId,
         proxyConfig: proxyConfig || { host: 'direct', port: 0, username: '', password: '' },
         db: { query },
       });

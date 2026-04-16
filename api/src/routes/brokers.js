@@ -201,41 +201,131 @@ router.post('/rithmic/auth', authRequired, async (req, res) => {
   };
   const serverUrl = servers[environment] || servers['Rithmic Paper Trading'];
 
-  // Rithmic requires the R|Protocol API dev kit and Protobuf.
-  // We can't do a full WebSocket handshake in a simple HTTP handler,
-  // but we can validate the credentials format and store them.
-  // The actual connection test happens when the listener starts.
-  //
-  // For production, this would open a WebSocket, send a login Protobuf,
-  // wait for the login response, then close. For now we validate format
-  // and return a session token that references the stored creds.
+  // Validate credentials by attempting a WebSocket login handshake
+  try {
+    const WebSocket = (await import('ws')).default;
+    const result = await new Promise((resolve, reject) => {
+      const ws = new WebSocket(serverUrl, { headers: { 'User-Agent': 'Tradevanish/1.0' } });
+      const timeout = setTimeout(() => { ws.terminate(); reject(new Error('Connection timeout')); }, 15000);
 
-  if (username.length < 2 || password.length < 4) {
-    return res.status(401).json({ error: 'auth_failed', message: 'Invalid Rithmic credentials format' });
+      ws.on('open', () => {
+        ws.send(JSON.stringify({
+          template_id: 10, // LOGIN_REQUEST
+          user: username,
+          password: password,
+          app_name: 'Tradevanish',
+          app_version: '1.0',
+          system_name: environment || 'Rithmic Paper Trading',
+          infra_type: 2,
+          fcm_id: fcmId || undefined,
+          ib_id: ibId || undefined,
+        }));
+      });
+
+      ws.on('message', (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.template_id === 11) { // LOGIN_RESPONSE
+            clearTimeout(timeout);
+            ws.close();
+            if (msg.rp_code === '0' || msg.rp_code === 0 || !msg.rp_code) {
+              resolve({ success: true, accounts: msg.accounts || [] });
+            } else {
+              reject(new Error(msg.text_msg || `Login rejected (code ${msg.rp_code})`));
+            }
+          }
+        } catch {}
+      });
+
+      ws.on('error', (err) => { clearTimeout(timeout); reject(err); });
+      ws.on('close', () => { clearTimeout(timeout); });
+    });
+
+    const sessionId = `rith_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    res.json({
+      token: sessionId,
+      serverUrl,
+      platform: 'rithmic',
+      accounts: result.accounts,
+    });
+  } catch (err) {
+    res.status(401).json({
+      error: 'auth_failed',
+      message: `Rithmic authentication failed: ${err.message}`,
+    });
   }
-
-  // Store credentials encrypted in DB for the listener to use later
-  // (encryption would be AES-256-GCM in production)
-  const sessionId = `rith_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-
-  res.json({
-    token: sessionId,
-    serverUrl,
-    platform: 'rithmic',
-    note: 'Credentials will be validated when listener connects to R|Protocol WebSocket',
-  });
 });
 
 router.post('/rithmic/accounts', authRequired, async (req, res) => {
-  const { token, username } = req.body;
-
-  // Rithmic accounts are tied to the FCM/IB relationship.
-  // In a full implementation, we'd query the order plant for account list.
-  // For now, return the account info based on what the user provided.
-  // The actual account list comes from the R|Protocol login response.
+  const { token, username, environment, password, fcmId, ibId } = req.body;
 
   if (!token) return res.status(400).json({ error: 'Token required' });
 
+  // Try to get accounts via WebSocket login
+  try {
+    const WebSocket = (await import('ws')).default;
+    const servers = {
+      'Rithmic Paper Trading': 'wss://rprotocol.rithmic.com:443',
+      'Rithmic 01 (Live)': 'wss://rituz00100.rithmic.com:443',
+      'Rithmic Demo': 'wss://rprotocol-demo.rithmic.com:443',
+    };
+    const serverUrl = servers[environment] || servers['Rithmic Paper Trading'];
+
+    const accounts = await new Promise((resolve, reject) => {
+      const ws = new WebSocket(serverUrl, { headers: { 'User-Agent': 'Tradevanish/1.0' } });
+      const timeout = setTimeout(() => { ws.terminate(); resolve([]); }, 15000);
+      const collected = [];
+
+      ws.on('open', () => {
+        ws.send(JSON.stringify({
+          template_id: 10,
+          user: username,
+          password: password,
+          app_name: 'Tradevanish',
+          app_version: '1.0',
+          system_name: environment || 'Rithmic Paper Trading',
+          infra_type: 2,
+          fcm_id: fcmId || undefined,
+          ib_id: ibId || undefined,
+        }));
+      });
+
+      ws.on('message', (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.template_id === 11 && msg.rp_code !== '0' && msg.rp_code !== 0 && msg.rp_code !== undefined) {
+            clearTimeout(timeout); ws.close(); resolve([]);
+          }
+          if (msg.template_id === 11) {
+            // After login, request account list
+            ws.send(JSON.stringify({ template_id: 302, fcm_id: fcmId, ib_id: ibId }));
+          }
+          if (msg.template_id === 303) {
+            if (msg.account_id) collected.push({ id: msg.account_id, name: msg.account_id, fcm_id: msg.fcm_id, ib_id: msg.ib_id });
+            // Rithmic sends one message per account, with is_last flag
+            if (msg.is_last) { clearTimeout(timeout); ws.close(); resolve(collected); }
+          }
+        } catch {}
+      });
+
+      ws.on('error', () => { clearTimeout(timeout); resolve([]); });
+    });
+
+    if (accounts.length > 0) {
+      return res.json({
+        accounts: accounts.map(a => ({
+          id: a.id,
+          name: a.name || `Rithmic ${a.id}`,
+          balance: null,
+          type: 'Rithmic',
+          fcm_id: a.fcm_id,
+          ib_id: a.ib_id,
+        })),
+      });
+    }
+  } catch {}
+
+  // Fallback: return the basic account info
   res.json({
     accounts: [
       {
