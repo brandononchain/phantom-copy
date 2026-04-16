@@ -3334,7 +3334,9 @@ const STYLES = `
   --sans:'Plus Jakarta Sans',system-ui,sans-serif;--mono:'Space Mono','SF Mono',monospace;
   --ease:cubic-bezier(0.32,0.72,0,1);--sw:240px;
 }
-body{background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;height:0;display:none}
+*{scrollbar-width:none;-ms-overflow-style:none}
 .c-grn{color:var(--grn)!important}.c-red{color:var(--red)!important}.c-blu{color:var(--blu)!important}.c-wht{color:var(--t1)!important}
 .c-bold{font-weight:600}.c-mono{font-family:var(--mono);font-size:12px}.c-dim{color:var(--t3)}
 .layout{display:flex;min-height:100dvh}
