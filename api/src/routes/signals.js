@@ -14,6 +14,7 @@ import crypto from 'crypto';
 import { query } from '../db/pool.js';
 import { copyEngine } from '../services/copy-engine.js';
 import { resolveContractId, normalizeTicker, getContractInfo } from '../services/contracts.js';
+import { authRequired } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -85,18 +86,8 @@ function parseSignal(body) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Generate a new signal key
-router.post('/keys', async (req, res) => {
-  // This needs auth - check cookie or API key
-  const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Authentication required' });
-
-  let userId;
-  try {
-    const jwt = await import('jsonwebtoken');
-    const { config } = await import('../config/index.js');
-    const decoded = jwt.default.verify(token, config.jwt.secret);
-    userId = decoded.id;
-  } catch { return res.status(401).json({ error: 'Invalid session' }); }
+router.post('/keys', authRequired, async (req, res) => {
+  const userId = req.user.id;
 
   const { name } = req.body;
 
@@ -139,17 +130,8 @@ router.post('/keys', async (req, res) => {
 });
 
 // List signal keys
-router.get('/keys', async (req, res) => {
-  const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Authentication required' });
-
-  let userId;
-  try {
-    const jwt = await import('jsonwebtoken');
-    const { config } = await import('../config/index.js');
-    const decoded = jwt.default.verify(token, config.jwt.secret);
-    userId = decoded.id;
-  } catch { return res.status(401).json({ error: 'Invalid session' }); }
+router.get('/keys', authRequired, async (req, res) => {
+  const userId = req.user.id;
 
   const result = await query(
     `SELECT id, name, key_prefix, status, created_at, last_used_at
@@ -171,17 +153,8 @@ router.get('/keys', async (req, res) => {
 });
 
 // Delete signal key
-router.delete('/keys/:id', async (req, res) => {
-  const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Authentication required' });
-
-  let userId;
-  try {
-    const jwt = await import('jsonwebtoken');
-    const { config } = await import('../config/index.js');
-    const decoded = jwt.default.verify(token, config.jwt.secret);
-    userId = decoded.id;
-  } catch { return res.status(401).json({ error: 'Invalid session' }); }
+router.delete('/keys/:id', authRequired, async (req, res) => {
+  const userId = req.user.id;
 
   await query(
     `UPDATE api_keys SET status = 'revoked' WHERE id = $1 AND user_id = $2 AND env = 'signal'`,
@@ -191,17 +164,8 @@ router.delete('/keys/:id', async (req, res) => {
 });
 
 // Get signal execution history
-router.get('/history', async (req, res) => {
-  const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Authentication required' });
-
-  let userId;
-  try {
-    const jwt = await import('jsonwebtoken');
-    const { config } = await import('../config/index.js');
-    const decoded = jwt.default.verify(token, config.jwt.secret);
-    userId = decoded.id;
-  } catch { return res.status(401).json({ error: 'Invalid session' }); }
+router.get('/history', authRequired, async (req, res) => {
+  const userId = req.user.id;
 
   const result = await query(
     `SELECT ce.*, a.label as master_label,

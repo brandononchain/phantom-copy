@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { HubConnectionBuilder, HttpTransportType } from '@microsoft/signalr';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { ProxyAgent, fetch as undiFetch } from 'undici';
 import { EventEmitter } from 'events';
 
 const PROJECTX_API    = 'https://api.topstepx.com';
@@ -20,12 +20,13 @@ const TOKEN_REFRESH_MS  = 23 * 60 * 60 * 1000; // 23 hours (tokens last 24h)
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export async function authenticateProjectX(username, apiKey, proxyAgent) {
-  const response = await fetch(`${PROJECTX_API}/api/Auth/loginKey`, {
+  const opts = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain' },
     body: JSON.stringify({ userName: username, apiKey }),
-    agent: proxyAgent,
-  });
+  };
+  if (proxyAgent) opts.dispatcher = proxyAgent;
+  const response = await undiFetch(`${PROJECTX_API}/api/Auth/loginKey`, opts);
 
   const data = await response.json();
 
@@ -39,14 +40,15 @@ export async function authenticateProjectX(username, apiKey, proxyAgent) {
 // ─── Validate Session ────────────────────────────────────────────────────────
 
 export async function validateSession(token, proxyAgent) {
-  const response = await fetch(`${PROJECTX_API}/api/Auth/validate`, {
+  const opts = {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'text/plain',
     },
-    agent: proxyAgent,
-  });
+  };
+  if (proxyAgent) opts.dispatcher = proxyAgent;
+  const response = await undiFetch(`${PROJECTX_API}/api/Auth/validate`, opts);
 
   return response.ok;
 }
@@ -71,8 +73,9 @@ export class ProjectXMasterListener extends EventEmitter {
   }
 
   createAgent(proxyConfig) {
+    if (!proxyConfig || proxyConfig.host === 'direct') return null;
     const url = `http://${proxyConfig.username}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-    return new HttpsProxyAgent(url);
+    return new ProxyAgent(url);
   }
 
   // ── Full startup sequence ───────────────────────────────────────────────
@@ -81,10 +84,9 @@ export class ProjectXMasterListener extends EventEmitter {
     try {
       // Stage 1: Proxy
       this.emit('stage', 'proxy');
-      const ipCheck = await fetch('https://api.ipify.org?format=json', {
-        agent: this.proxyAgent,
-        signal: AbortSignal.timeout(10000),
-      });
+      const ipOpts = { signal: AbortSignal.timeout(10000) };
+      if (this.proxyAgent) ipOpts.dispatcher = this.proxyAgent;
+      const ipCheck = await undiFetch('https://api.ipify.org?format=json', ipOpts);
       const { ip } = await ipCheck.json();
       this.emit('proxy-verified', { ip });
 
@@ -144,12 +146,13 @@ export class ProjectXMasterListener extends EventEmitter {
         httpClient: {
           // Custom HTTP client that uses our proxy agent
           post: async (url, httpRequest) => {
-            const res = await fetch(url, {
+            const postOpts = {
               method: 'POST',
               headers: httpRequest.headers,
               body: httpRequest.content,
-              agent: this.proxyAgent,
-            });
+            };
+            if (this.proxyAgent) postOpts.dispatcher = this.proxyAgent;
+            const res = await undiFetch(url, postOpts);
             return {
               statusCode: res.status,
               statusText: res.statusText,
@@ -418,7 +421,7 @@ export class ProjectXMasterListener extends EventEmitter {
   // ── REST Helper ─────────────────────────────────────────────────────────
 
   async apiRequest(method, path, body) {
-    const response = await fetch(`${PROJECTX_API}${path}`, {
+    const opts = {
       method,
       headers: {
         'Authorization': `Bearer ${this.token}`,
@@ -426,8 +429,9 @@ export class ProjectXMasterListener extends EventEmitter {
         'Accept': 'text/plain',
       },
       body: body ? JSON.stringify(body) : undefined,
-      agent: this.proxyAgent,
-    });
+    };
+    if (this.proxyAgent) opts.dispatcher = this.proxyAgent;
+    const response = await undiFetch(`${PROJECTX_API}${path}`, opts);
 
     if (!response.ok) {
       throw new Error(`ProjectX API ${method} ${path}: ${response.status}`);
@@ -516,7 +520,7 @@ export class ProjectXCopyClient {
     if (limitPrice) body.limitPrice = limitPrice;
     if (stopPrice) body.stopPrice = stopPrice;
 
-    const response = await fetch(`${PROJECTX_API}/api/Order/place`, {
+    const opts = {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.token}`,
@@ -524,8 +528,9 @@ export class ProjectXCopyClient {
         'Accept': 'text/plain',
       },
       body: JSON.stringify(body),
-      agent: this.agent, // Routes through follower's unique proxy IP
-    });
+    };
+    if (this.agent) opts.dispatcher = this.agent;
+    const response = await undiFetch(`${PROJECTX_API}/api/Order/place`, opts);
 
     const data = await response.json();
 
@@ -540,43 +545,46 @@ export class ProjectXCopyClient {
   }
 
   async modifyOrder({ orderId, size, limitPrice, stopPrice }) {
-    const response = await fetch(`${PROJECTX_API}/api/Order/modify`, {
+    const opts = {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ orderId, size, limitPrice, stopPrice }),
-      agent: this.agent,
-    });
+    };
+    if (this.agent) opts.dispatcher = this.agent;
+    const response = await undiFetch(`${PROJECTX_API}/api/Order/modify`, opts);
 
     return response.json();
   }
 
   async cancelOrder(orderId) {
-    const response = await fetch(`${PROJECTX_API}/api/Order/cancel`, {
+    const opts = {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ orderId }),
-      agent: this.agent,
-    });
+    };
+    if (this.agent) opts.dispatcher = this.agent;
+    const response = await undiFetch(`${PROJECTX_API}/api/Order/cancel`, opts);
 
     return response.json();
   }
 
   async getAccounts() {
-    const response = await fetch(`${PROJECTX_API}/api/Account/search`, {
+    const opts = {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ onlyActiveAccounts: true }),
-      agent: this.agent,
-    });
+    };
+    if (this.agent) opts.dispatcher = this.agent;
+    const response = await undiFetch(`${PROJECTX_API}/api/Account/search`, opts);
 
     const data = await response.json();
     return data.accounts || [];

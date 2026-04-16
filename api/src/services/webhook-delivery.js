@@ -49,7 +49,7 @@ async function deliverToEndpoint(webhook, event, data, attempt = 0) {
 
     // Log delivery
     await query(
-      `INSERT INTO webhook_deliveries (webhook_id, event, status, response_code, last_attempt_at, attempts)
+      `INSERT INTO webhook_deliveries (webhook_id, event_type, status, response_code, last_attempt_at, attempts)
        VALUES ($1, $2, $3, $4, NOW(), $5)`,
       [webhook.id, event, response.ok ? 'delivered' : 'failed', response.status, attempt + 1]
     );
@@ -60,7 +60,7 @@ async function deliverToEndpoint(webhook, event, data, attempt = 0) {
     }
   } catch (err) {
     await query(
-      `INSERT INTO webhook_deliveries (webhook_id, event, status, response_code, last_attempt_at, attempts)
+      `INSERT INTO webhook_deliveries (webhook_id, event_type, status, response_code, last_attempt_at, attempts)
        VALUES ($1, $2, 'error', 0, NOW(), $3)`,
       [webhook.id, event, attempt + 1]
     ).catch(() => {});

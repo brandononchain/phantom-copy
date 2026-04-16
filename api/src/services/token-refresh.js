@@ -37,7 +37,7 @@ async function checkAndRefreshTokens() {
        FROM broker_tokens bt
        JOIN accounts a ON a.id = bt.account_id
        WHERE bt.expires_at IS NOT NULL
-         AND bt.expires_at < NOW() + INTERVAL '${REFRESH_BUFFER_MS / 1000} seconds'
+         AND bt.expires_at < NOW() + INTERVAL '10 minutes'
          AND bt.refresh_token IS NOT NULL`
     );
 
@@ -62,7 +62,7 @@ async function refreshToken(tokenRow) {
 
   if (platform !== 'tradovate' && platform !== 'ninjatrader') return;
 
-  const baseUrl = TRADOVATE_DEMO_API; // TODO: detect live vs demo from account config
+  const baseUrl = process.env.TRADOVATE_LIVE === 'true' ? TRADOVATE_API : TRADOVATE_DEMO_API;
 
   console.log(`[TOKEN-REFRESH] Refreshing ${platform} token for account ${account_id}`);
 

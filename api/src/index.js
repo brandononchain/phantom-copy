@@ -152,9 +152,12 @@ async function start() {
   // If the server restarted, reconnect any listeners that were running
   try {
     const { rows } = await pool.query(
-      `SELECT ls.*, a.credentials_encrypted, a.platform, a.broker_account_id
+      `SELECT ls.*, a.credentials_encrypted, a.platform, a.broker_account_id,
+              pa.proxy_url, pa.host AS proxy_host, pa.port AS proxy_port,
+              pa.proxy_username, pa.proxy_password, pa.ip_address AS proxy_ip
        FROM listener_sessions ls
        JOIN accounts a ON a.id = ls.account_id
+       LEFT JOIN proxy_assignments pa ON pa.account_id = a.id
        WHERE ls.status = 'active'`
     );
     if (rows.length > 0) {
@@ -170,6 +173,14 @@ async function start() {
               platform: session.platform,
               brokerAccountId: session.broker_account_id,
               credentials: creds,
+              proxyAssignment: session.proxy_url ? {
+                proxyUrl: session.proxy_url,
+                host: session.proxy_host,
+                port: session.proxy_port,
+                username: session.proxy_username,
+                password: session.proxy_password,
+                ip: session.proxy_ip,
+              } : undefined,
             });
             console.log(`[STARTUP] Restored listener for account ${session.account_id}`);
           }
