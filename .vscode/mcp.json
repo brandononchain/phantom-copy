@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "railway": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@railway/mcp-server"
+      ]
+    },
+    "Vercel": {
+      "url": "https://mcp.vercel.com"
+    }
+  }
+}

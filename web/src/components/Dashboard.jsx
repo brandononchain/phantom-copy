@@ -557,6 +557,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
           credentials: JSON.stringify({
             token: brokerToken,
             username: brokerUsername,
+            apiKey: brokerApiKey || undefined,
             brokerAccountId: selectedBrokerAccount?.id,
           }),
         }),
@@ -635,6 +636,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
           credentials: JSON.stringify({
             token: brokerToken,
             username: brokerUsername,
+            apiKey: brokerApiKey || undefined,
             brokerAccountId: selectedBrokerAccount?.id,
           }),
         }),
@@ -1022,12 +1024,16 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
 function MasterStatsBar({ accountId, balance, balanceDisplay }) {
   const [stats, setStats] = useState({ balance: balance || null, equity: null, totalPnl: null, tradingDays: null, winRate: null, wins: null, losses: null, totalTrades: null });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!accountId) { setLoading(false); return; }
     apiFetch("/api/brokers/stats", { method: "POST", body: JSON.stringify({ accountId }) })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setStats(prev => ({ ...prev, ...d })); })
+      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (ok && !data.error) setStats(prev => ({ ...prev, ...data }));
+        else if (data.error === 'token_expired') setError('Session expired — reconnect account');
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [accountId]);
@@ -1046,11 +1052,15 @@ function MasterStatsBar({ accountId, balance, balanceDisplay }) {
   ];
 
   return (
-    <div className="stats-bar-mobile" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--bdr)", borderRadius: 10, overflow: "hidden", margin: "12px 0" }}>
-      {items.map(s => (
-        <div key={s.label} style={{ background: "rgba(255,255,255,0.02)", padding: "12px 14px", textAlign: "center" }}>
-          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", color: "var(--t3)", fontFamily: "var(--sans)", marginBottom: 6 }}>{s.label}</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: loading ? "var(--t3)" : s.color, fontFamily: "var(--mono)", opacity: loading ? 0.4 : 1 }}>{loading ? "..." : s.value}</div>
+    <div className="msb-grid stats-bar-mobile">
+      {error ? (
+        <div className="msb-cell" style={{ gridColumn: "1 / -1" }}>
+          <div className="msb-value" style={{ color: "var(--red)", fontSize: 11, fontWeight: 500 }}>{error}</div>
+        </div>
+      ) : items.map(s => (
+        <div key={s.label} className="msb-cell">
+          <div className="msb-label">{s.label}</div>
+          <div className={cn("msb-value", loading && "msb-loading")} style={{ color: loading ? undefined : s.color }}>{loading ? "..." : s.value}</div>
         </div>
       ))}
     </div>
@@ -1105,12 +1115,21 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
               </div>
               <MasterStatsBar accountId={master.id} balance={master.balance} balanceDisplay={master.balanceDisplay} />
               <MasterListenerPanel master={master} listenerState={listenerState} listenerStage={listenerStage} events={events} positions={positions} onStartListener={onStartListener} onStopListener={onStopListener} />
-              <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
-                <button className="fc-btn fc-btn-danger" onClick={() => {
+              <div className="master-actions-bar">
+                <div className="master-actions-left">
+                  <span className="master-actions-hint">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                    Listener runs in the cloud even when you close this tab
+                  </span>
+                </div>
+                <button className="master-disconnect-btn" onClick={() => {
                   if (!confirm("Disconnect master account? This will stop the listener and remove the account. You can connect a new master afterwards.")) return;
                   if (listenerState === "listening") onStopListener();
                   onDisconnect(master.id);
-                }}>Disconnect Master</button>
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18.36 6.64A9 9 0 0 1 20.77 15M5.64 5.64A9 9 0 0 0 3.23 15"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M1 1l22 22"/></svg>
+                  Disconnect
+                </button>
               </div>
             </div>
           ) : (
@@ -1134,7 +1153,15 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
                   <div><span className="acct-fc-label">LATENCY</span><LatBar ms={a.latency} /></div>
                   <div><span className="acct-fc-label">TRADES</span><span className="c-mono">{a.trades}</span></div>
                 </div>
-                <div className="acct-fc-actions"><button className="fc-btn" onClick={() => onPause(a.id)}>{a.status === "paused" ? "Resume" : "Pause"}</button><button className="fc-btn fc-btn-danger" onClick={() => onDisconnect(a.id)}>Disconnect</button></div>
+                <div className="acct-fc-actions">
+                  <button className="fc-btn fc-btn-pause" onClick={() => onPause(a.id)}>
+                    {a.status === "paused" ? (<><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Resume</>) : (<><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause</>)}
+                  </button>
+                  <button className="fc-btn fc-btn-disconnect" onClick={() => onDisconnect(a.id)}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Remove
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -3509,7 +3536,7 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .prof-signout-yes:hover{opacity:0.9}
 
 /* ── Plan Limits Grid ──────────────────── */
-.pp-limits{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bdr);border:1px solid var(--bdr);border-radius:0;margin-bottom:20px;overflow:hidden}
+.pp-limits{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bdr);border:1px solid var(--bdr);border-radius:12px;margin-bottom:20px;overflow:hidden}
 .pp-limit{padding:12px 14px;background:var(--bg);display:flex;justify-content:space-between;align-items:center}
 .pp-limit-off{opacity:0.4}
 .pp-limit-label{font-size:11px;color:var(--t3)}
@@ -3529,7 +3556,7 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 
 /* Custom Proxy Pools */
 .pp-pool-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px}
-.pp-pool-card{padding:16px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:0;transition:border-color 0.2s}
+.pp-pool-card{padding:16px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:14px;transition:border-color 0.2s}
 .pp-pool-card:hover{border-color:rgba(255,255,255,0.1)}
 .pp-pool-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .pp-pool-name{font-size:13px;font-weight:600}
@@ -3546,38 +3573,38 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pp-pool-btn-del{color:rgba(255,77,77,0.5);border-color:rgba(255,77,77,0.1)}
 .pp-pool-btn-del:hover{color:var(--red);background:rgba(255,77,77,0.06)}
 
-.pp-add-btn{padding:10px;width:100%;background:rgba(255,255,255,0.02);border:1px dashed var(--bdr);border-radius:0;color:var(--t3);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s}
+.pp-add-btn{padding:10px;width:100%;background:rgba(255,255,255,0.02);border:1px dashed var(--bdr);border-radius:12px;color:var(--t3);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s}
 .pp-add-btn:hover{background:rgba(255,255,255,0.04);color:var(--t1);border-color:rgba(255,255,255,0.1)}
-.pp-add-form{padding:20px;background:rgba(255,255,255,0.015);border:1px solid var(--bdr);border-radius:0;margin-top:12px}
+.pp-add-form{padding:20px;background:rgba(255,255,255,0.015);border:1px solid var(--bdr);border-radius:14px;margin-top:12px}
 .pp-add-actions{display:flex;gap:10px;margin-top:16px}
 
 /* API Keys */
 .pp-api-info{margin-bottom:20px}
 .pp-api-endpoint{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .pp-api-method{font-size:9px;font-weight:700;letter-spacing:0.1em;padding:3px 8px;background:rgba(99,102,241,0.12);color:#A5B4FC;border-radius:3px}
-.pp-api-url{font-family:var(--mono);font-size:13px;color:var(--t1);background:rgba(255,255,255,0.03);padding:6px 12px;border:1px solid var(--bdr);border-radius:0}
+.pp-api-url{font-family:var(--mono);font-size:13px;color:var(--t1);background:rgba(255,255,255,0.03);padding:6px 12px;border:1px solid var(--bdr);border-radius:8px}
 .pp-api-desc{font-size:12px;color:var(--t3);line-height:1.5}
 .pp-api-keys{display:flex;flex-direction:column;gap:8px}
 .pp-api-keys-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .pp-add-btn-sm{padding:4px 10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.15);border-radius:4px;color:#A5B4FC;font-family:var(--sans);font-size:10px;font-weight:600;cursor:pointer;transition:all 0.2s}
 .pp-add-btn-sm:hover{background:rgba(99,102,241,0.15)}
 
-.pp-newkey{padding:16px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:0;margin-bottom:12px}
+.pp-newkey{padding:16px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:12px;margin-bottom:12px}
 .pp-newkey-form{display:flex;gap:8px;align-items:center}
 .pp-newkey-result{display:flex;flex-direction:column;gap:8px}
 .pp-newkey-warn{font-size:11px;color:#FFB800;font-weight:500}
 .pp-newkey-display{display:flex;gap:8px;align-items:center}
-.pp-newkey-code{flex:1;font-family:var(--mono);font-size:11px;color:var(--grn);background:rgba(0,229,160,0.04);padding:10px 12px;border:1px solid rgba(0,229,160,0.12);border-radius:0;word-break:break-all}
+.pp-newkey-code{flex:1;font-family:var(--mono);font-size:11px;color:var(--grn);background:rgba(0,229,160,0.04);padding:10px 12px;border:1px solid rgba(0,229,160,0.12);border-radius:8px;word-break:break-all}
 .pp-newkey-copy{padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid var(--bdr);border-radius:4px;color:var(--t1);font-family:var(--sans);font-size:11px;font-weight:600;cursor:pointer;transition:all 0.2s;white-space:nowrap}
 .pp-newkey-copy:hover{background:rgba(255,255,255,0.1)}
 
-.pp-key-row{display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:0;flex-wrap:wrap}
+.pp-key-row{display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:10px;flex-wrap:wrap}
 .pp-key-name{font-size:12px;font-weight:600;min-width:80px}
 .pp-key-val{font-family:var(--mono);font-size:11px;color:var(--t2);flex:1}
 .pp-key-meta{font-size:10px;color:var(--t3)}
 
 /* Webhooks */
-.pp-wh-row{display:flex;align-items:center;gap:16px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:0;margin-bottom:8px;flex-wrap:wrap}
+.pp-wh-row{display:flex;align-items:center;gap:16px;padding:14px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:12px;margin-bottom:8px;flex-wrap:wrap}
 .pp-wh-main{flex:1;min-width:260px}
 .pp-wh-url{font-family:var(--mono);font-size:12px;color:var(--t1);display:block;margin-bottom:6px}
 .pp-wh-events{display:flex;gap:4px;flex-wrap:wrap}
@@ -3585,7 +3612,7 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pp-wh-stats{display:flex;align-items:center;gap:12px}
 
 .pp-wh-event-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px}
-.pp-wh-event-btn{display:flex;flex-direction:column;gap:2px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:0;text-align:left;cursor:pointer;transition:all 0.2s;font-family:var(--sans)}
+.pp-wh-event-btn{display:flex;flex-direction:column;gap:2px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:10px;text-align:left;cursor:pointer;transition:all 0.2s;font-family:var(--sans)}
 .pp-wh-event-btn:hover{background:rgba(255,255,255,0.04)}
 .pp-wh-event-btn-on{border-color:rgba(99,102,241,0.3)!important;background:rgba(99,102,241,0.06)!important}
 .pp-wh-evt-name{font-size:12px;font-weight:600;color:var(--t1)}
@@ -3600,8 +3627,9 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pg-sub{font-family:var(--sans);font-size:13.5px;color:var(--t3);margin-top:6px}.pg-acts{display:flex;gap:10px;align-items:center}
 
 /* Buttons */
-.btn-primary{display:inline-flex;align-items:center;gap:8px;padding:10px 12px 10px 20px;background:var(--acc);color:#fff;border:none;border-radius:100px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.4s var(--ease);white-space:nowrap}
-.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(99,102,241,0.3)}.btn-primary:active{transform:scale(0.97)}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;padding:10px 12px 10px 20px;background:var(--acc);color:#fff;border:none;border-radius:100px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.4s var(--ease);white-space:nowrap;position:relative;overflow:hidden}
+.btn-primary::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.1) 0%,transparent 50%);pointer-events:none}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(99,102,241,0.35)}.btn-primary:active{transform:scale(0.97)}
 .btn-full{width:100%;justify-content:center;padding:14px 20px;margin-top:16px}
 .btn-aw{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.15);transition:all 0.4s var(--ease)}
 .btn-primary:hover .btn-aw{background:rgba(255,255,255,0.25)}
@@ -3611,8 +3639,8 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 
 /* Stats */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
-.st-card{background:var(--card);border:1px solid var(--bdr);border-radius:20px;padding:24px;box-shadow:inset 0 1px 1px rgba(255,255,255,0.04);transition:background 0.3s var(--ease)}
-.st-card:hover{background:var(--card-h)}
+.st-card{background:var(--card);border:1px solid var(--bdr);border-radius:20px;padding:24px;box-shadow:inset 0 1px 1px rgba(255,255,255,0.04),0 2px 8px rgba(0,0,0,0.08);transition:all 0.3s var(--ease)}
+.st-card:hover{background:var(--card-h);transform:translateY(-1px);box-shadow:inset 0 1px 1px rgba(255,255,255,0.04),0 4px 16px rgba(0,0,0,0.12)}
 .st-eye{font-size:10px;font-weight:600;letter-spacing:0.12em;color:var(--t3);margin-bottom:12px}
 .st-val{font-size:32px;font-weight:700;font-family:var(--mono);letter-spacing:-0.03em;line-height:1}
 .st-of{font-size:18px;color:var(--t3);font-weight:400}.st-sub{font-size:12px;color:var(--t3);margin-top:8px}
@@ -3621,7 +3649,7 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 
 /* Card Shell */
 .card-sh{background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:24px;padding:6px;margin-bottom:24px}
-.card-in{background:var(--card);border-radius:20px;border:1px solid rgba(255,255,255,0.04);box-shadow:inset 0 1px 1px rgba(255,255,255,0.05);overflow:hidden}
+.card-in{background:var(--card);border-radius:20px;border:1px solid rgba(255,255,255,0.04);box-shadow:inset 0 1px 1px rgba(255,255,255,0.05),0 2px 8px rgba(0,0,0,0.1);overflow:hidden}
 .card-hd{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--bdr)}
 .card-t{font-size:15px;font-weight:600;letter-spacing:-0.01em}
 .badge{font-size:10px;font-weight:600;letter-spacing:0.1em;color:var(--t3);background:rgba(255,255,255,0.05);padding:4px 12px;border-radius:100px;border:1px solid var(--bdr)}
@@ -3668,8 +3696,9 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .hr-n{font-size:18px;font-weight:700;font-family:var(--mono)}.hr-lab{font-size:8px;letter-spacing:0.14em;color:var(--t3);margin-top:2px}
 
 /* How It Works */
-.how-shell{background:rgba(255,255,255,0.02);border:1px solid var(--bdr);border-radius:24px;padding:6px;margin-bottom:24px}
-.how-inner{background:var(--card);border-radius:20px;border:1px solid rgba(255,255,255,0.04);padding:28px 32px}
+.how-shell{background:rgba(255,255,255,0.015);border:1px solid var(--bdr);border-radius:24px;padding:6px;margin-bottom:24px;transition:border-color 0.3s}
+.how-shell:hover{border-color:rgba(255,255,255,0.08)}
+.how-inner{background:var(--card);border-radius:20px;border:1px solid rgba(255,255,255,0.04);padding:24px 28px}
 .how-title{font-size:12px;font-weight:600;letter-spacing:0.1em;color:var(--t3);text-transform:uppercase;margin-bottom:20px}
 .how-steps{display:flex;align-items:flex-start;gap:0}
 .how-step{flex:1;display:flex;gap:12px;align-items:flex-start}
@@ -3684,16 +3713,36 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .acct-m-stat{display:flex;flex-direction:column;gap:4px}.acct-m-stat-label{font-size:9px;letter-spacing:0.1em;color:var(--t3);font-weight:600}
 .acct-empty{padding:48px 24px;text-align:center;color:var(--t3);font-size:14px;display:flex;flex-direction:column;align-items:center;gap:16px}
 .acct-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
-.acct-fcard{padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.03);border-right:1px solid rgba(255,255,255,0.03);animation:fsu 0.5s var(--ease) both;transition:background 0.2s}
-.acct-fcard:hover{background:rgba(255,255,255,0.015)}
+.acct-fcard{padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.03);border-right:1px solid rgba(255,255,255,0.03);animation:fsu 0.5s var(--ease) both;transition:all 0.3s var(--ease)}
+.acct-fcard:hover{background:rgba(255,255,255,0.02)}
 .acct-fc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .acct-fc-name-row{display:flex;align-items:center;gap:4px}.acct-fc-name{font-weight:600;font-size:14px}
 .acct-fc-ip{margin-bottom:12px}
 .acct-fc-stats{display:flex;flex-direction:column;gap:8px}.acct-fc-label{font-size:9px;letter-spacing:0.1em;color:var(--t3);font-weight:600;margin-right:8px}
 .acct-fc-actions{display:flex;gap:8px;margin-top:14px}
-.fc-btn{flex:1;padding:7px;border:1px solid var(--bdr);background:transparent;color:var(--t2);border-radius:8px;font-family:var(--sans);font-size:11px;font-weight:500;cursor:pointer;transition:all 0.3s var(--ease)}
-.fc-btn:hover{background:rgba(255,255,255,0.05);color:var(--t1)}
+.fc-btn{flex:1;padding:8px 12px;border:1px solid var(--bdr);background:rgba(255,255,255,0.02);color:var(--t2);border-radius:10px;font-family:var(--sans);font-size:11px;font-weight:500;cursor:pointer;transition:all 0.3s var(--ease);display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.fc-btn:hover{background:rgba(255,255,255,0.06);color:var(--t1);border-color:rgba(255,255,255,0.12)}
+.fc-btn svg{opacity:0.5;transition:opacity 0.2s}.fc-btn:hover svg{opacity:0.8}
+.fc-btn-pause{border-color:rgba(99,102,241,0.15)}.fc-btn-pause:hover{background:rgba(99,102,241,0.08);border-color:rgba(99,102,241,0.25);color:#A5B4FC}
+.fc-btn-disconnect{border-color:rgba(255,77,77,0.12);color:rgba(255,77,77,0.5)}.fc-btn-disconnect:hover{background:rgba(255,77,77,0.06);color:rgba(255,77,77,0.8);border-color:rgba(255,77,77,0.2)}
 .fc-btn-danger{border-color:rgba(255,77,77,0.2);color:rgba(255,77,77,0.7)}.fc-btn-danger:hover{background:rgba(255,77,77,0.08);color:var(--red)}
+
+/* ── Master Stats Bar ──────────────────── */
+.msb-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--bdr);border-radius:12px;overflow:hidden;margin:14px 0}
+.msb-cell{background:rgba(255,255,255,0.02);padding:14px 16px;text-align:center;transition:background 0.2s}
+.msb-cell:hover{background:rgba(255,255,255,0.035)}
+.msb-label{font-size:9px;font-weight:600;letter-spacing:0.1em;color:var(--t3);font-family:var(--sans);margin-bottom:6px}
+.msb-value{font-size:15px;font-weight:700;font-family:var(--mono);letter-spacing:-0.02em;transition:color 0.3s}
+.msb-loading{color:var(--t3)!important;opacity:0.4}
+
+/* ── Master Actions Bar ────────────────── */
+.master-actions-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-top:1px solid var(--bdr);margin-top:4px;background:rgba(255,255,255,0.01)}
+.master-actions-left{display:flex;align-items:center;gap:8px}
+.master-actions-hint{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3);font-weight:400}
+.master-actions-hint svg{opacity:0.4;flex-shrink:0}
+.master-disconnect-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:rgba(255,77,77,0.04);border:1px solid rgba(255,77,77,0.15);border-radius:8px;color:rgba(255,77,77,0.5);font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:0.3px;cursor:pointer;transition:all 0.3s var(--ease);text-transform:uppercase}
+.master-disconnect-btn:hover{background:rgba(255,77,77,0.08);color:rgba(255,77,77,0.85);border-color:rgba(255,77,77,0.3);box-shadow:0 0 12px rgba(255,77,77,0.08)}
+.master-disconnect-btn svg{opacity:0.5;transition:opacity 0.2s}.master-disconnect-btn:hover svg{opacity:0.9}
 
 /* ── Master Listener Panel ─────────────── */
 .ml-panel{border-top:1px solid var(--bdr)}
@@ -4163,6 +4212,14 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 
 /* ── Master Stats Bar (6→3 cols) ──────── */
 .stats-bar-mobile{grid-template-columns:repeat(3,1fr)!important}
+.msb-grid{grid-template-columns:repeat(3,1fr)!important}
+.msb-cell{padding:10px 12px}
+.msb-value{font-size:13px}
+
+/* ── Master Actions Bar (Mobile) ──────── */
+.master-actions-bar{flex-direction:column;gap:10px;padding:12px 14px}
+.master-actions-hint{font-size:10px}
+.master-disconnect-btn{width:100%;justify-content:center;min-height:40px;border-radius:10px}
 
 /* ── Cards ─────────────────────────────── */
 .card-sh{margin-bottom:12px;border-radius:16px}
@@ -4177,6 +4234,10 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .acct-m-name{font-size:14px}
 .acct-m-stat{display:flex;align-items:center;justify-content:space-between;width:100%}
 .ip-badge{font-size:10px;padding:3px 8px}
+
+/* ── Follower Card Buttons (Mobile) ───── */
+.fc-btn{min-height:38px;border-radius:10px;font-size:11px}
+.acct-fc-actions{gap:6px}
 
 /* ── Listener Panel ───────────────────── */
 .listener-panel{padding:12px;margin-top:8px;border-radius:12px}
@@ -4360,6 +4421,9 @@ select.auth-input{cursor:pointer;appearance:none;background-image:url("data:imag
 @media(max-width:480px){
 .stats{grid-template-columns:1fr;gap:6px}
 .stats-bar-mobile{grid-template-columns:repeat(2,1fr)!important}
+.msb-grid{grid-template-columns:repeat(2,1fr)!important}
+.msb-cell{padding:8px 10px}
+.msb-value{font-size:12px}
 .st-val{font-size:20px}
 .prov-grid{grid-template-columns:1fr}
 .pp-limits{grid-template-columns:1fr}

@@ -402,19 +402,50 @@ router.post('/stats', authRequired, async (req, res) => {
 
   if (account.platform === 'topstepx') {
     try {
-      // Fetch account balance
-      const acctRes = await fetch('https://api.topstepx.com/api/Account/search', {
+      let token = creds.token;
+
+      // Try fetching with stored token first, re-auth if it fails
+      let acctRes = await fetch('https://api.topstepx.com/api/Account/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/plain', Authorization: `Bearer ${creds.token}` },
+        headers: { 'Content-Type': 'application/json', Accept: 'text/plain', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ onlyActiveAccounts: true }),
       });
+
+      // If token expired, re-authenticate using stored apiKey
+      if (!acctRes.ok && creds.apiKey && creds.username) {
+        const reauth = await fetch('https://api.topstepx.com/api/Auth/loginKey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'text/plain' },
+          body: JSON.stringify({ userName: creds.username, apiKey: creds.apiKey }),
+        });
+        const reauthData = await reauth.json();
+        if (reauthData.success && reauthData.token) {
+          token = reauthData.token;
+          // Update stored credentials with new token
+          creds.token = token;
+          await query('UPDATE accounts SET credentials_encrypted = $1 WHERE id = $2', [JSON.stringify(creds), account.id]);
+
+          // Retry the account search with new token
+          acctRes = await fetch('https://api.topstepx.com/api/Account/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'text/plain', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ onlyActiveAccounts: true }),
+          });
+        }
+      }
+
+      // If token expired and no apiKey stored, ask user to reconnect
+      if (!acctRes.ok && (!creds.apiKey || !creds.username)) {
+        return res.status(401).json({ error: 'token_expired', message: 'Session expired. Please disconnect and reconnect your account to refresh.' });
+      }
+
       const acctData = await acctRes.json();
       const brokerAcct = (acctData.accounts || []).find(a => String(a.id) === String(account.broker_account_id));
 
       // Fetch trade history
       const tradeRes = await fetch('https://api.topstepx.com/api/Trade/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/plain', Authorization: `Bearer ${creds.token}` },
+        headers: { 'Content-Type': 'application/json', Accept: 'text/plain', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ accountId: parseInt(account.broker_account_id) }),
       });
       const tradeData = await tradeRes.json();

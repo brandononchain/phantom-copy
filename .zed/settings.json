@@ -1,0 +1,13 @@
+{
+  "context_servers": {
+    "railway": {
+      "source": "custom",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@railway/mcp-server"
+      ],
+      "env": {}
+    }
+  }
+}
