@@ -385,8 +385,6 @@ router.post('/ninjatrader/accounts', authRequired, async (req, res) => {
   }
 });
 
-export default router;
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Account Stats (Balance, Equity, Trading Days, Win Rate)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -471,3 +469,5 @@ router.post('/stats', authRequired, async (req, res) => {
     res.json({ balance: null, equity: null, tradingDays: null, winRate: null });
   }
 });
+
+export default router;

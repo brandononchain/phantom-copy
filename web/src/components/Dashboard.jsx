@@ -1105,6 +1105,13 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
               </div>
               <MasterStatsBar accountId={master.id} balance={master.balance} balanceDisplay={master.balanceDisplay} />
               <MasterListenerPanel master={master} listenerState={listenerState} listenerStage={listenerStage} events={events} positions={positions} onStartListener={onStartListener} onStopListener={onStopListener} />
+              <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+                <button className="fc-btn fc-btn-danger" onClick={() => {
+                  if (!confirm("Disconnect master account? This will stop the listener and remove the account. You can connect a new master afterwards.")) return;
+                  if (listenerState === "listening") onStopListener();
+                  onDisconnect(master.id);
+                }}>Disconnect Master</button>
+              </div>
             </div>
           ) : (
             <div className="acct-empty"><p>No master account connected yet.</p><button className="btn-primary" onClick={onOpenConnect}><span>Connect Master</span><span className="btn-aw"><span className="btn-ar">&#8594;</span></span></button></div>
@@ -1512,7 +1519,7 @@ function SettingsPage({ accounts, currentPlan }) {
 
   // Load ALL settings from DB on mount
   useEffect(() => {
-    apiFetch("/api/settings/risk").then(r => r.ok ? r.json() : null).then(data => {
+    apiFetch("/api/settings/risk", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(data => {
       if (data?.rules) {
         const r = data.rules;
         if (r.max_qty != null) setGlobalMaxQty(Number(r.max_qty));
@@ -1579,6 +1586,9 @@ function SettingsPage({ accounts, currentPlan }) {
         }),
       });
       if (!r.ok) { const d = await r.json(); throw new Error(d.message || d.error || "Save failed"); }
+      // Update state from server response to stay in sync
+      const saved_data = await r.json();
+      if (saved_data?.rules?.copy_symbols) setCopySymbols(saved_data.rules.copy_symbols.split(",").filter(Boolean));
 
       // Save follower overrides
       const overridePromises = Object.entries(followerOverrides).map(([accountId, ov]) =>
@@ -3205,12 +3215,20 @@ export default function App({ initialMode }) {
   const addAccount = (acc) => setAccounts(prev => [...prev, acc]);
 
   const disconnectAccount = async (accountId) => {
-    if (!confirm("Disconnect this account? It will be removed from your dashboard.")) return;
     try {
+      const acct = accounts.find(a => a.id === accountId);
+      // Master disconnect has its own inline confirm; follower gets a prompt
+      if (acct?.role !== "master" && !confirm("Disconnect this account? It will be removed from your dashboard.")) return;
+      // If disconnecting the master, stop the listener first
+      if (acct?.role === "master" && listenerState === "listening") {
+        await apiFetch("/api/listeners/stop", { method: "POST" }).catch(() => {});
+        setListenerState("idle");
+      }
       await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
       setAccounts(prev => prev.filter(a => a.id !== accountId));
     } catch (err) {
       console.error("Disconnect failed:", err);
+      alert("Failed to disconnect: " + err.message);
     }
   };
 

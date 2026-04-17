@@ -70,9 +70,25 @@ router.post('/', authRequired, async (req, res) => {
 // ── Disconnect account ────────────────────────────────────────────────────────
 
 router.delete('/:id', authRequired, async (req, res) => {
-  await query('DELETE FROM proxy_assignments WHERE account_id = $1', [req.params.id]);
-  await query('DELETE FROM accounts WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
-  res.json({ success: true });
+  try {
+    // Check if this is a master account — stop listener session
+    const acct = await query('SELECT role FROM accounts WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    if (acct.rows.length === 0) return res.status(404).json({ error: 'Account not found' });
+
+    if (acct.rows[0].role === 'master') {
+      await query('UPDATE listener_sessions SET status = $1, stopped_at = NOW() WHERE account_id = $2 AND status = $3', ['stopped', req.params.id, 'active']);
+    }
+
+    // Clean up related data
+    await query('DELETE FROM follower_overrides WHERE account_id = $1', [req.params.id]);
+    await query('DELETE FROM proxy_assignments WHERE account_id = $1', [req.params.id]);
+    await query('DELETE FROM broker_tokens WHERE account_id = $1', [req.params.id]).catch(() => {});
+    await query('DELETE FROM accounts WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[ACCOUNTS] Delete error:', err.message);
+    res.status(500).json({ error: 'Failed to disconnect account' });
+  }
 });
 
 export default router;
