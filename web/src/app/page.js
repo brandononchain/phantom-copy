@@ -234,7 +234,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="hero-sub">
-            One master trade. Unlimited follower accounts.
+            One master trade. Unlimited follower accounts.<br />
             Each connection isolated behind its own residential IP.<br />
             <span style={{color:'rgba(255,255,255,0.55)',fontWeight:500}}>No shared fingerprints. No correlation. No detection.</span>
           </p>
