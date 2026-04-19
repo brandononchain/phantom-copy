@@ -439,5 +439,3 @@ async function placeMasterOrder(master, signal, contractId) {
 }
 
 export default router;
-
-export default router;

@@ -7,7 +7,7 @@ export default function LandingPage() {
   useEffect(() => {
     // If Tradovate OAuth callback landed here, redirect to /app
     if (typeof window !== 'undefined' && window.location.search.includes('tradovate_token')) {
-      window.location.href = '/app' + window.location.search;
+      window.location.href = '/app/dashboard' + window.location.search;
       return;
     }
 
@@ -218,7 +218,7 @@ export default function LandingPage() {
             <a href="/docs">Docs</a>
             <a href="/docs/rest-api">API</a>
             <a href="/docs/quickstart">Quick Start</a>
-            <a href="/app" className="hero-nav-cta">Launch App</a>
+            <a href="/app/dashboard" className="hero-nav-cta">Launch App</a>
           </div>
         </nav>
 

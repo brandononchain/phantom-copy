@@ -1,10 +1,7 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+import { redirect } from 'next/navigation';
 
-const Dashboard = dynamic(() => import('@/components/Dashboard'), { ssr: false });
-
-export default function AppPage() {
-  return <Dashboard />;
+export default function AppIndexPage() {
+  redirect('/app/dashboard');
 }
-// force redeploy 1776150913

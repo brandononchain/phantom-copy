@@ -3152,7 +3152,7 @@ export default function App({ initialMode }) {
     if (isNewAccount) setShowOnboarding(true);
     // Navigate to /app if on sign-in or sign-up pages (without full reload)
     if (typeof window !== "undefined" && (window.location.pathname === "/sign-in" || window.location.pathname === "/sign-up")) {
-      window.history.replaceState({}, "", "/app");
+      window.history.replaceState({}, "", "/app/dashboard");
     }
   };
 
