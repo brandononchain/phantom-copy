@@ -10,11 +10,16 @@ const STATUS_COLORS = {
 const PLATFORMS = [
   { id: "tradovate", name: "Tradovate", desc: "Futures via OAuth login", color: "#3B82F6", icon: "TV" },
   { id: "topstepx", name: "TopStepX", desc: "Futures via ProjectX Gateway API", color: "#E5484D", icon: "TX" },
-  { id: "rithmic", name: "Rithmic", desc: "Futures via R|Trader credentials", color: "#10B981", icon: "RT" },
-  { id: "ninjatrader", name: "NinjaTrader", desc: "Futures via NinjaTrader account", color: "#F59E0B", icon: "NT" },
+  { id: "rithmic", name: "Rithmic", desc: "Coming soon", color: "#10B981", icon: "RT", disabled: true },
+  { id: "ninjatrader", name: "NinjaTrader", desc: "Coming soon", color: "#F59E0B", icon: "NT", disabled: true },
 ];
 
-const PROXY_PROVIDERS = ["BrightData", "Oxylabs", "SmartProxy", "IPRoyal"];
+const PROXY_PROVIDERS = [
+  { id: "BrightData", name: "BrightData", disabled: false },
+  { id: "Oxylabs", name: "Oxylabs", disabled: true },
+  { id: "SmartProxy", name: "SmartProxy", disabled: true },
+  { id: "IPRoyal", name: "IPRoyal", disabled: true },
+];
 
 // Master listener connection stages
 const LISTENER_STAGES = [
@@ -726,9 +731,19 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
             <div className="modal-body">
               <div className="plat-grid">
                 {PLATFORMS.map((p, i) => (
-                  <button key={p.id} className="plat-card" onClick={() => { setPlatform(p); setStep("auth"); }} style={{ animationDelay: `${i * 80}ms` }}>
+                  <button
+                    key={p.id}
+                    className={cn("plat-card", p.disabled && "plat-card-disabled")}
+                    onClick={() => { if (p.disabled) return; setPlatform(p); setStep("auth"); }}
+                    disabled={p.disabled}
+                    style={{ animationDelay: `${i * 80}ms`, opacity: p.disabled ? 0.4 : 1, cursor: p.disabled ? 'not-allowed' : 'pointer' }}
+                    title={p.disabled ? 'Coming soon' : undefined}
+                  >
                     <div className="plat-icon" style={{ background: `${p.color}18`, color: p.color, borderColor: `${p.color}30` }}>{p.icon}</div>
-                    <div className="plat-info"><div className="plat-name">{p.name}</div><div className="plat-desc">{p.desc}</div></div>
+                    <div className="plat-info">
+                      <div className="plat-name">{p.name}{p.disabled && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 6px', background: '#2a2a2e', color: '#888', borderRadius: 4, fontWeight: 500 }}>SOON</span>}</div>
+                      <div className="plat-desc">{p.desc}</div>
+                    </div>
                     <svg className="plat-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                   </button>
                 ))}
@@ -830,7 +845,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
             <div className="modal-body">
               <div className="proxy-assign fade-in">
                 <div className="pa-header"><div className="pa-acct"><StatusDot status="connected" /><span className="pa-name">{label || `${platform.name} Account`}</span><span className="pa-role">{role}</span></div></div>
-                <div className="pa-section"><label className="pa-label">PROXY PROVIDER</label><div className="pa-options">{PROXY_PROVIDERS.map(p => (<button key={p} className={cn("pa-opt", proxyProvider === p && "pa-opt-on")} onClick={() => setProxyProvider(p)}>{p}</button>))}</div></div>
+                <div className="pa-section"><label className="pa-label">PROXY PROVIDER</label><div className="pa-options">{PROXY_PROVIDERS.map(p => (<button key={p.id} className={cn("pa-opt", proxyProvider === p.id && "pa-opt-on")} onClick={() => { if (p.disabled) return; setProxyProvider(p.id); }} disabled={p.disabled} style={{ opacity: p.disabled ? 0.35 : 1, cursor: p.disabled ? 'not-allowed' : 'pointer' }} title={p.disabled ? 'Coming soon' : undefined}>{p.name}{p.disabled && <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.7 }}>SOON</span>}</button>))}</div></div>
                 <div className="pa-section"><label className="pa-label">IP REGION</label><div className="pa-options">{["US-East", "US-West", "US-Central", "EU-West", "EU-Central"].map(r => (<button key={r} className={cn("pa-opt", proxyRegion === r && "pa-opt-on")} onClick={() => setProxyRegion(r)}>{r}</button>))}</div></div>
                 <div className="pa-preview">
                   <div className="pa-pv-row"><span className="pa-pv-label">Assigned IP</span><span className="pa-pv-val ip-glow">{ipLoading ? <span style={{ opacity: 0.4 }}>Resolving...</span> : assignedIP || "Pending"}</span></div>
@@ -1496,7 +1511,7 @@ function ProxyPage({ accounts, onRotateProxy, onTestProxy, onRotateAll }) {
           );
         })}
       </div>
-      <div className="card-sh"><div className="card-in"><div className="card-hd"><h2 className="card-t">Provider Pool</h2></div><div className="prov-grid">{PROXY_PROVIDERS.map(p => { const c = accounts.filter(a => a.proxy === p).length; return (<div key={p} className="prov-item"><div className="prov-name">{p}</div><div className="prov-count">{c} assigned</div><div className="prov-bar-bg"><div className="prov-bar" style={{ width: `${(c / (accounts.length || 1)) * 100}%` }} /></div></div>); })}</div></div></div>
+      <div className="card-sh"><div className="card-in"><div className="card-hd"><h2 className="card-t">Provider Pool</h2></div><div className="prov-grid">{PROXY_PROVIDERS.map(p => { const c = accounts.filter(a => a.proxy === p.id).length; return (<div key={p.id} className="prov-item" style={{ opacity: p.disabled ? 0.4 : 1 }}><div className="prov-name">{p.name}{p.disabled && <span style={{ marginLeft: 6, fontSize: 9, color: '#888' }}>SOON</span>}</div><div className="prov-count">{c} assigned</div><div className="prov-bar-bg"><div className="prov-bar" style={{ width: `${(c / (accounts.length || 1)) * 100}%` }} /></div></div>); })}</div></div></div>
     </div>
   );
 }
