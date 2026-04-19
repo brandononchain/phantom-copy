@@ -54,6 +54,7 @@ Prop firms monitor for copy trading by detecting shared IP addresses, identical 
 | Follower overrides | ❌ | ✅ | ✅ |
 | REST API | ❌ | ❌ | ✅ |
 | Webhooks | ❌ | ❌ | ✅ |
+| MCP Server | ❌ | ❌ | ✅ |
 | TradingView Signals | ✅ | ✅ | ✅ |
 | Custom Proxy Pools | ❌ | ❌ | ✅ |
         `
@@ -475,6 +476,117 @@ const signature = crypto
 ## Testing
 
 Click **Test** next to any webhook in the dashboard to send a test payload to your endpoint.
+        `
+      },
+      {
+        slug: "mcp",
+        title: "MCP Server",
+        icon: "🧠",
+        content: `
+# MCP Server (Pro+)
+
+Tradevanish exposes a **Model Context Protocol (MCP)** server so AI assistants like **Claude Desktop**, **Cursor**, **Windsurf**, and any MCP-compatible client can manage your copy trading directly — place signals, check balances, rotate proxies, and monitor followers using natural language.
+
+> **Why it matters:** your AI agent can now say *"flatten all NQ positions, rotate the proxy on account #3, and mute trade.failed webhooks for an hour"* and it actually happens. No custom glue code.
+
+## Requirements
+
+- **Pro+ plan** (uses the same gating as REST API + Webhooks)
+- A Tradevanish API key (\`pc_live_...\`) — generate one in **Profile > REST API**
+- An MCP-compatible client (Claude Desktop ≥ 0.7, Cursor, Windsurf, Cline, etc.)
+
+## Connection
+
+The MCP server is served over HTTPS (streamable transport) at:
+
+\`\`\`
+https://www.tradevanish.com/api/mcp
+\`\`\`
+
+Authenticate with your API key via the \`Authorization\` header.
+
+### Claude Desktop
+
+Add to \`~/Library/Application Support/Claude/claude_desktop_config.json\` (macOS) or \`%APPDATA%\\Claude\\claude_desktop_config.json\` (Windows):
+
+\`\`\`json
+{
+  "mcpServers": {
+    "tradevanish": {
+      "command": "npx",
+      "args": ["-y", "@tradevanish/mcp-client@latest"],
+      "env": {
+        "TRADEVANISH_API_KEY": "pc_live_YOUR_API_KEY"
+      }
+    }
+  }
+}
+\`\`\`
+
+Restart Claude Desktop. The **tradevanish** tools will appear in the tool picker.
+
+### Cursor / Windsurf / Cline
+
+In your MCP settings (\`~/.cursor/mcp.json\` or equivalent):
+
+\`\`\`json
+{
+  "mcpServers": {
+    "tradevanish": {
+      "url": "https://www.tradevanish.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer pc_live_YOUR_API_KEY"
+      }
+    }
+  }
+}
+\`\`\`
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| \`list_accounts\` | Return all connected master + follower accounts |
+| \`get_account_stats\` | Live balance, equity, day P&L, win rate for one account |
+| \`place_signal\` | Fire a TradingView-style signal (ticker, action, side, qty) |
+| \`flatten_all\` | Close every open position across master + followers |
+| \`pause_follower\` / \`resume_follower\` | Temporarily exclude an account from copying |
+| \`rotate_proxy\` | Assign a fresh residential IP to an account |
+| \`test_proxy\` | Verify proxy health + report latency |
+| \`get_risk_rules\` / \`update_risk_rules\` | Read or change kill switch, daily loss, size mode |
+| \`list_recent_trades\` | Last N copy executions with fill status per follower |
+| \`toggle_kill_switch\` | Immediate stop — halts all new signals instantly |
+| \`get_listener_status\` | WebSocket state, uptime, reconnect count per master |
+
+## Available Resources
+
+| Resource URI | Content |
+|--------------|---------|
+| \`tradevanish://accounts\` | JSON snapshot of every connected account |
+| \`tradevanish://trades/today\` | Today's copy executions + fill breakdown |
+| \`tradevanish://risk-rules\` | Current risk configuration |
+| \`tradevanish://listeners\` | Master listener health per platform |
+
+## Example Prompts
+
+Once connected, try these with Claude / Cursor:
+
+- *"Show me every follower account and its current day P&L."*
+- *"My NQ trade on the master just got hit — is it copying correctly?"*
+- *"Rotate the proxy on any follower with latency over 80ms."*
+- *"Enable the kill switch and flatten everything. Then send a Slack message."*
+- *"What's my win rate this week across all TopStepX accounts?"*
+
+## Security
+
+- Every MCP request runs through the same Pro+ API-key auth as the REST API
+- All trading actions are logged to \`copy_executions\` with \`signal_type=MCP_*\`
+- Revoke access anytime by revoking the API key in **Profile > REST API**
+- Rate limit: 60 requests/minute per key (shared with REST)
+
+## Status
+
+> **Beta** — the MCP server is in active development. Schema and tool names may change. Join the Discord for early access and breaking-change notifications.
         `
       },
       {
