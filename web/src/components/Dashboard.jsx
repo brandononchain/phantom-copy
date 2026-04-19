@@ -11,7 +11,7 @@ const PLATFORMS = [
   { id: "tradovate", name: "Tradovate", desc: "Futures via OAuth login", color: "#3B82F6", icon: "TV" },
   { id: "topstepx", name: "TopStepX", desc: "Futures via ProjectX Gateway API", color: "#E5484D", icon: "TX" },
   { id: "rithmic", name: "Rithmic", desc: "Coming soon", color: "#10B981", icon: "RT", disabled: true },
-  { id: "ninjatrader", name: "NinjaTrader", desc: "Coming soon", color: "#F59E0B", icon: "NT", disabled: true },
+  { id: "ninjatrader", name: "NinjaTrader", desc: "Futures via Tradovate OAuth", color: "#F59E0B", icon: "NT" },
 ];
 
 const PROXY_PROVIDERS = [
