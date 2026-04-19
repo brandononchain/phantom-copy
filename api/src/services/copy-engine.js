@@ -11,6 +11,7 @@ import { ProjectXCopyClient } from '../listeners/projectx-listener.js';
 import { RithmicCopyClient } from '../listeners/rithmic-listener.js';
 import { createProxyAgent } from './proxy-provider.js';
 import { deliverWebhook } from './webhook-delivery.js';
+import { decryptJSON } from './crypto.js';
 
 export class CopyEngine extends EventEmitter {
   constructor() {
@@ -115,17 +116,26 @@ export class CopyEngine extends EventEmitter {
         query('SELECT * FROM risk_rules WHERE user_id = $1', [master.user_id]),
         query('SELECT * FROM follower_overrides WHERE user_id = $1', [master.user_id]),
         query(
-          `SELECT COUNT(*) as trade_count, COALESCE(SUM(master_price), 0) as daily_pnl
-           FROM copy_executions WHERE user_id = $1 AND timestamp >= CURRENT_DATE`,
+          // Realized daily PnL comes from copy_fills.realized_pnl (populated on
+          // CLOSE fills and periodic broker sync). Summing master_price on OPEN
+          // fills was wrong — that's an entry price, not PnL.
+          `SELECT
+             (SELECT COUNT(*) FROM copy_executions
+                WHERE user_id = $1 AND timestamp >= CURRENT_DATE) AS trade_count,
+             COALESCE((SELECT SUM(cf.realized_pnl)
+                FROM copy_fills cf
+                JOIN copy_executions ce ON ce.id = cf.execution_id
+                WHERE ce.user_id = $1 AND cf.filled_at >= CURRENT_DATE), 0) AS daily_pnl`,
           [master.user_id]
         ),
-        query('SELECT plan FROM users WHERE id = $1', [master.user_id]),
+        query('SELECT plan, trial_ends_at, trial_plan FROM users WHERE id = $1', [master.user_id]),
       ]);
 
-      // Enforce follower limit by plan
-      const userPlan = userResult.rows[0]?.plan || 'basic';
+      // Enforce follower limit by plan (trial grants Pro limits)
+      const userRow = userResult.rows[0] || {};
+      const effectivePlan = resolveEffectivePlan(userRow);
       let activeFollowers = followers.rows;
-      if (userPlan === 'basic' && activeFollowers.length > 5) {
+      if (effectivePlan === 'basic' && activeFollowers.length > 5) {
         activeFollowers = activeFollowers.slice(0, 5);
         console.log(`[COPY-ENGINE] Basic plan: capping to 5 followers (${followers.rows.length} connected)`);
       }
@@ -147,10 +157,13 @@ export class CopyEngine extends EventEmitter {
         return;
       }
 
-      // Daily loss limit check
-      if (riskRules.daily_loss_limit && Math.abs(parseFloat(todayStats.daily_pnl)) >= parseFloat(riskRules.daily_loss_limit)) {
-        console.log(`[COPY-ENGINE] Daily loss limit reached ($${todayStats.daily_pnl}). Skipping.`);
-        this.emit('event', { type: 'risk', msg: `Daily loss limit reached: $${todayStats.daily_pnl}` });
+      // Daily loss limit check — compares realized PnL to the configured limit.
+      // Only trips on losses (daily_pnl <= -limit), not on equivalent gains.
+      const dailyPnl = parseFloat(todayStats.daily_pnl) || 0;
+      const lossLimit = parseFloat(riskRules.daily_loss_limit) || 0;
+      if (lossLimit > 0 && dailyPnl <= -lossLimit) {
+        console.log(`[COPY-ENGINE] Daily loss limit reached (PnL: $${dailyPnl}). Skipping.`);
+        this.emit('event', { type: 'risk', msg: `Daily loss limit reached: $${dailyPnl.toFixed(2)}` });
         return;
       }
 
@@ -281,7 +294,7 @@ export class CopyEngine extends EventEmitter {
     // Decrypt credentials
     let creds;
     try {
-      creds = JSON.parse(follower.credentials_encrypted || '{}');
+      creds = decryptJSON(follower.credentials_encrypted);
     } catch {
       throw new Error('Invalid follower credentials');
     }
@@ -453,3 +466,16 @@ export class CopyEngine extends EventEmitter {
 
 // Singleton
 export const copyEngine = new CopyEngine();
+
+// ── Trial-aware plan resolution ───────────────────────────────────────────────
+// A user in their free trial window gets the feature access of their trial_plan
+// (default "pro") regardless of the value stored in users.plan.
+function resolveEffectivePlan(userRow) {
+  if (!userRow) return 'basic';
+  const plan = userRow.plan || 'basic';
+  const trialEnds = userRow.trial_ends_at ? new Date(userRow.trial_ends_at) : null;
+  if (trialEnds && trialEnds > new Date()) {
+    return userRow.trial_plan || 'pro';
+  }
+  return plan;
+}

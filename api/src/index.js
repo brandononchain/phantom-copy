@@ -24,6 +24,7 @@ import signalRoutes from './routes/signals.js';
 import { listenerManager } from './services/listener-manager.js';
 import { copyEngine } from './services/copy-engine.js';
 import { initRedis, startWorker, shutdownQueue, getQueueStats } from './services/copy-queue.js';
+import { decryptJSON } from './services/crypto.js';
 import { startTokenRefreshLoop, stopTokenRefreshLoop } from './services/token-refresh.js';
 
 const app = express();
@@ -169,8 +170,7 @@ async function start() {
       console.log(`[STARTUP] Restoring ${rows.length} active listener(s)...`);
       for (const session of rows) {
         try {
-          let creds = {};
-          try { creds = JSON.parse(session.credentials_encrypted || '{}'); } catch {}
+          let creds = decryptJSON(session.credentials_encrypted);
           // TopStepX needs apiKey to re-auth on restore; Tradovate needs token
           const hasRequiredCreds =
             (session.platform === 'topstepx' && creds.apiKey && creds.username) ||

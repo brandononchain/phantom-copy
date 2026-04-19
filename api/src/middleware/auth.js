@@ -84,9 +84,13 @@ const PLAN_FEATURES = {
 
 export function requirePlan(feature) {
   return async (req, res, next) => {
-    // Fetch fresh plan from DB
-    const result = await query('SELECT plan FROM users WHERE id = $1', [req.user.id]);
-    const plan = result.rows[0]?.plan || 'basic';
+    // Fetch fresh plan from DB (and trial window)
+    const result = await query('SELECT plan, trial_ends_at, trial_plan FROM users WHERE id = $1', [req.user.id]);
+    const row = result.rows[0] || {};
+    const storedPlan = row.plan || 'basic';
+    // Trial grants the trial_plan (default "pro") for the window
+    const trialActive = row.trial_ends_at && new Date(row.trial_ends_at) > new Date();
+    const plan = trialActive ? (row.trial_plan || 'pro') : storedPlan;
     const features = PLAN_FEATURES[plan];
 
     if (!features?.[feature]) {

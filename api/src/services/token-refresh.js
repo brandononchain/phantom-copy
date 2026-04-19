@@ -7,6 +7,7 @@
 
 import { query } from '../db/pool.js';
 import { copyEngine } from './copy-engine.js';
+import { encryptJSON, decryptJSON } from './crypto.js';
 
 const TRADOVATE_API = 'https://live.tradovateapi.com/v1';
 const TRADOVATE_DEMO_API = 'https://demo.tradovateapi.com/v1';
@@ -91,12 +92,12 @@ async function refreshToken(tokenRow) {
 
   // Update the account's credentials_encrypted with the new token
   let creds = {};
-  try { creds = JSON.parse(tokenRow.credentials_encrypted || '{}'); } catch {}
+  creds = decryptJSON(tokenRow.credentials_encrypted);
   creds.token = newAccessToken;
 
   await query(
     `UPDATE accounts SET credentials_encrypted = $1 WHERE id = $2`,
-    [JSON.stringify(creds), account_id]
+    [encryptJSON(creds), account_id]
   );
 
   // Invalidate the cached copy client so it picks up the new token

@@ -15,6 +15,7 @@ import { query } from '../db/pool.js';
 import { copyEngine } from '../services/copy-engine.js';
 import { resolveContractId, normalizeTicker, getContractInfo } from '../services/contracts.js';
 import { authRequired } from '../middleware/auth.js';
+import { encryptJSON, decryptJSON } from '../services/crypto.js';
 
 const router = Router();
 
@@ -168,12 +169,14 @@ router.get('/history', authRequired, async (req, res) => {
   const userId = req.user.id;
 
   const result = await query(
-    `SELECT ce.*, a.label as master_label,
-       (SELECT COUNT(*) FROM copy_fills cf WHERE cf.execution_id = ce.id AND cf.status = 'filled') as fills,
-       (SELECT COUNT(*) FROM copy_fills cf WHERE cf.execution_id = ce.id AND cf.status = 'error') as errors
-     FROM copy_executions ce
-     JOIN accounts a ON a.id = ce.master_account_id
-     WHERE ce.user_id = $1 ORDER BY ce.timestamp DESC LIMIT 50`,
+    `SELECT se.id, se.status, se.ticker, se.action, se.side, se.qty, se.price,
+            se.order_type, se.master_order_id, se.latency_ms, se.error, se.created_at,
+            a.label AS master_label
+       FROM signal_events se
+       LEFT JOIN accounts a ON a.id = se.master_account_id
+      WHERE se.user_id = $1
+      ORDER BY se.created_at DESC
+      LIMIT 50`,
     [userId]
   );
 
@@ -213,7 +216,7 @@ router.post('/:signalKey', async (req, res) => {
   const signal = parseSignal(req.body);
   if (signal.error) {
     // Log the failed signal
-    await logSignal(userId, null, 'PARSE_ERROR', req.body, signal.error);
+    await logSignal({ userId, signalKeyId: key.id, status: 'PARSE_ERROR', payload: req.body, error: signal.error });
     return res.status(400).json({ error: signal.error, received: req.body });
   }
 
@@ -245,7 +248,7 @@ router.post('/:signalKey', async (req, res) => {
   );
 
   if (masterResult.rows.length === 0) {
-    await logSignal(userId, null, 'NO_MASTER', req.body, 'No active master account found');
+    await logSignal({ userId, signalKeyId: key.id, status: 'NO_MASTER', payload: req.body, error: 'No active master account found' });
     return res.status(400).json({ error: 'No active master account connected. Connect a master account first.' });
   }
 
@@ -254,7 +257,7 @@ router.post('/:signalKey', async (req, res) => {
   // 3a. Enforce kill switch BEFORE placing master order
   const riskRow = await query('SELECT kill_switch FROM risk_rules WHERE user_id = $1', [userId]);
   if (riskRow.rows[0]?.kill_switch) {
-    await logSignal(userId, master.id, 'KILL_SWITCH', req.body, 'Kill switch enabled');
+    await logSignal({ userId, signalKeyId: key.id, masterAccountId: master.id, status: 'KILL_SWITCH', payload: req.body, error: 'Kill switch enabled', signal });
     return res.status(403).json({ error: 'Kill switch enabled — signals rejected' });
   }
 
@@ -268,7 +271,7 @@ router.post('/:signalKey', async (req, res) => {
   try {
     masterOrderResult = await placeMasterOrder(master, signal, contractId);
   } catch (err) {
-    await logSignal(userId, master.id, 'MASTER_ORDER_FAILED', req.body, err.message);
+    await logSignal({ userId, signalKeyId: key.id, masterAccountId: master.id, status: 'MASTER_ORDER_FAILED', payload: req.body, error: err.message, signal });
     return res.status(500).json({
       error: 'Master order failed',
       message: err.message,
@@ -297,9 +300,15 @@ router.post('/:signalKey', async (req, res) => {
   const latency = Date.now() - receivedAt;
 
   // 7. Log the successful signal
-  await logSignal(userId, master.id, 'EXECUTED', req.body, null, {
-    ticker: signal.ticker, action: signal.action, side: signal.side,
-    qty: signal.qty, latency, masterOrderId: masterOrderResult?.orderId,
+  await logSignal({
+    userId,
+    signalKeyId: key.id,
+    masterAccountId: master.id,
+    status: 'EXECUTED',
+    payload: req.body,
+    signal,
+    latencyMs: latency,
+    masterOrderId: masterOrderResult?.orderId,
   });
 
   // 8. Return success
@@ -321,22 +330,21 @@ router.post('/:signalKey', async (req, res) => {
   });
 });
 
-// ── Signal logging helper ────────────────────────────────────────────────────
+// ── Signal logging helper (writes to dedicated signal_events table) ──────────
 
-async function logSignal(userId, masterAccountId, status, payload, error, details) {
+async function logSignal({ userId, signalKeyId = null, masterAccountId = null, status, payload, error = null, signal = null, latencyMs = null, masterOrderId = null }) {
   try {
+    const ticker = signal?.ticker || payload?.ticker || payload?.symbol || null;
+    const action = signal?.action || null;
+    const side = signal?.side || null;
+    const qty = signal?.qty ?? (payload?.qty ? parseInt(payload.qty) : null);
+    const price = signal?.price ?? (payload?.price ? parseFloat(payload.price) : null);
+    const orderType = signal?.orderType || null;
     await query(
-      `INSERT INTO copy_executions (user_id, master_account_id, signal_type, contract_id, side, qty, master_price)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        userId,
-        masterAccountId,
-        `WEBHOOK_${status}`,
-        details?.ticker || payload?.ticker || 'unknown',
-        details?.side || payload?.action || 'unknown',
-        details?.qty || parseInt(payload?.qty) || 0,
-        details?.price || parseFloat(payload?.price) || 0,
-      ]
+      `INSERT INTO signal_events
+         (user_id, signal_key_id, master_account_id, status, ticker, action, side, qty, price, order_type, master_order_id, latency_ms, error, raw_payload)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [userId, signalKeyId, masterAccountId, status, ticker, action, side, qty, price, orderType, masterOrderId, latencyMs, error, payload ? JSON.stringify(payload) : null]
     );
   } catch (err) {
     console.error('[SIGNAL] Failed to log signal:', err.message);
@@ -346,8 +354,7 @@ async function logSignal(userId, masterAccountId, status, payload, error, detail
 // ── Master order placement with token re-auth ───────────────────────────────
 
 async function placeMasterOrder(master, signal, contractId) {
-  let creds = {};
-  try { creds = JSON.parse(master.credentials_encrypted || '{}'); } catch {}
+  let creds = decryptJSON(master.credentials_encrypted);
 
   if (master.platform === 'topstepx') {
     const orderBody = {
@@ -389,7 +396,7 @@ async function placeMasterOrder(master, signal, contractId) {
           creds.token = authData.token;
           await query(
             'UPDATE accounts SET credentials_encrypted = $1 WHERE id = $2',
-            [JSON.stringify(creds), master.id]
+            [encryptJSON(creds), master.id]
           );
           ({ status, data } = await doPlace(creds.token));
         } else {

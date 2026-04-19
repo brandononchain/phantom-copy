@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db/pool.js';
 import { authRequired } from '../middleware/auth.js';
+import { encryptJSON, decryptJSON } from '../services/crypto.js';
 
 const router = Router();
 
@@ -112,7 +113,7 @@ router.post('/tradovate/auth', authRequired, async (req, res) => {
 // Step 2: OAuth callback - Tradovate redirects here with ?code=XXX
 router.get('/tradovate/callback', async (req, res) => {
   const { code, error } = req.query;
-  const frontendUrl = (appConfig.cors.origin || 'https://www.tradevanish.com') + '/app';
+  const frontendUrl = (appConfig.cors.origin || 'https://www.tradevanish.com') + '/app/dashboard';
 
   if (error || !code) {
     return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(error || 'no_code')}`);
@@ -142,7 +143,7 @@ router.get('/tradovate/callback', async (req, res) => {
       return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(tokenData.error_description || tokenData.error || 'token_exchange_failed')}`);
     }
 
-    return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(tokenData.access_token)}&tradovate_expires=${tokenData.expires_in || 5400}&tradovate_env=demo`);
+    return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(tokenData.access_token)}&tradovate_refresh=${encodeURIComponent(tokenData.refresh_token || '')}&tradovate_expires=${tokenData.expires_in || 5400}&tradovate_env=demo`);
   } catch (err) {
     return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(err.message)}`);
   }
@@ -398,7 +399,7 @@ router.post('/stats', authRequired, async (req, res) => {
 
   const account = acct.rows[0];
   let creds;
-  try { creds = JSON.parse(account.credentials_encrypted || '{}'); } catch { return res.status(400).json({ error: 'Invalid credentials' }); }
+  try { creds = decryptJSON(account.credentials_encrypted); } catch { return res.status(400).json({ error: 'Invalid credentials' }); }
 
   if (account.platform === 'topstepx') {
     try {
@@ -423,7 +424,7 @@ router.post('/stats', authRequired, async (req, res) => {
           token = reauthData.token;
           // Update stored credentials with new token
           creds.token = token;
-          await query('UPDATE accounts SET credentials_encrypted = $1 WHERE id = $2', [JSON.stringify(creds), account.id]);
+          await query('UPDATE accounts SET credentials_encrypted = $1 WHERE id = $2', [encryptJSON(creds), account.id]);
 
           // Retry the account search with new token
           acctRes = await fetch('https://api.topstepx.com/api/Account/search', {

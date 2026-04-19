@@ -173,6 +173,45 @@ const migrations = [
     `,
     down: `SELECT 1;`,
   },
+  {
+    id: '011_trial_signal_events_pnl',
+    up: `
+      -- Free trial support
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_plan VARCHAR(20);
+
+      -- Realized PnL tracking on copy fills (populated on close fills / broker sync)
+      ALTER TABLE copy_fills ADD COLUMN IF NOT EXISTS realized_pnl DECIMAL(20,8) DEFAULT 0;
+
+      -- Dedicated signal events table (no longer pollute copy_executions with webhook logs)
+      CREATE TABLE IF NOT EXISTS signal_events (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        master_account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+        signal_key_id INTEGER REFERENCES api_keys(id) ON DELETE SET NULL,
+        status VARCHAR(32) NOT NULL,
+        ticker VARCHAR(32),
+        action VARCHAR(16),
+        side VARCHAR(8),
+        qty INTEGER,
+        price DECIMAL(20,8),
+        order_type VARCHAR(16),
+        master_order_id VARCHAR(128),
+        latency_ms INTEGER,
+        error TEXT,
+        raw_payload JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_signal_events_user ON signal_events(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_signal_events_status ON signal_events(status);
+    `,
+    down: `
+      DROP TABLE IF EXISTS signal_events;
+      ALTER TABLE copy_fills DROP COLUMN IF EXISTS realized_pnl;
+      ALTER TABLE users DROP COLUMN IF EXISTS trial_ends_at;
+      ALTER TABLE users DROP COLUMN IF EXISTS trial_plan;
+    `,
+  },
 ];
 
 export async function runMigrations(pool) {
