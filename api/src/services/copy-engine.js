@@ -315,9 +315,10 @@ export class CopyEngine extends EventEmitter {
       });
     } else if (follower.platform === 'tradovate' || follower.platform === 'ninjatrader') {
       // Tradovate REST API client with undici proxy
+      const isLive = creds.isLive === true || creds.environment === 'live';
       client = {
         async placeOrder({ contractId, side, qty, orderType, limitPrice, stopPrice }) {
-          const baseUrl = 'https://demo.tradovateapi.com/v1';
+          const baseUrl = isLive ? 'https://live.tradovateapi.com/v1' : 'https://demo.tradovateapi.com/v1';
           const body = {
             accountSpec: follower.broker_account_id,
             accountId: parseInt(follower.broker_account_id),
@@ -424,22 +425,19 @@ export class CopyEngine extends EventEmitter {
   // ── Client Cache Cleanup (prevents memory leak at scale) ────────────────
 
   cleanupStaleClients() {
-    // Remove clients for accounts that are no longer connected
-    const activeAccountIds = new Set();
-    for (const [, session] of this.activeListeners) {
-      activeAccountIds.add(session.masterId);
-    }
-    
+    // Simple LRU: if cache exceeds 500, drop the oldest entries (Map preserves insertion order)
+    const MAX = 500;
+    if (this.followerClients.size <= MAX) return;
     let cleaned = 0;
-    for (const [accountId] of this.followerClients) {
-      // Keep clients that were used recently (rely on invalidateClient for explicit removal)
-      // But cap total cached clients at 500 to prevent unbounded growth
-      if (this.followerClients.size > 500) {
-        this.followerClients.delete(accountId);
-        cleaned++;
-      }
+    const toRemove = this.followerClients.size - MAX;
+    const iter = this.followerClients.keys();
+    for (let i = 0; i < toRemove; i++) {
+      const key = iter.next().value;
+      if (key === undefined) break;
+      this.followerClients.delete(key);
+      cleaned++;
     }
-    if (cleaned > 0) console.log(`[COPY-ENGINE] Cleaned ${cleaned} stale clients`);
+    if (cleaned > 0) console.log(`[COPY-ENGINE] Evicted ${cleaned} cached follower clients (LRU)`);
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────

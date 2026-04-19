@@ -27,6 +27,28 @@ class ListenerManager {
       return { error: 'Listener already running for this account', sessionId: existing.sessionId };
     }
 
+    // Validate platform-specific required credentials up front (clearer errors)
+    if (platform === 'topstepx') {
+      if (!credentials?.apiKey || !credentials?.username) {
+        throw new Error('TopStepX requires username and apiKey. Please reconnect your account.');
+      }
+    } else if (platform === 'tradovate' || platform === 'ninjatrader') {
+      if (!credentials?.token) {
+        throw new Error('Tradovate requires an access token. Please reconnect your account.');
+      }
+    } else if (platform === 'rithmic') {
+      if (!credentials?.username || !credentials?.password) {
+        throw new Error('Rithmic requires username and password. Please reconnect your account.');
+      }
+    }
+
+    // Mark any previous 'active' sessions for this account as stopped (guard against DB drift)
+    await query(
+      `UPDATE listener_sessions SET status = 'stopped', stopped_at = NOW()
+       WHERE account_id = $1 AND status IN ('active', 'starting', 'restarting')`,
+      [accountId]
+    );
+
     // Get proxy config
     let proxyConfig;
     if (proxyAssignment && proxyAssignment.proxyUrl) {

@@ -33,19 +33,22 @@ const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow Railway domains, localhost, and configured frontend URL
     const allowed = [
       config.cors.origin,
-      'https://app.tradevanish.com', 'https://www.tradevanish.com', 'https://web-production-0433b.up.railway.app',
       'https://tradevanish.com',
       'https://www.tradevanish.com',
+      'https://app.tradevanish.com',
+      'https://web-production-0433b.up.railway.app',
       'http://localhost:3000',
-    ].filter(Boolean);
-    if (!origin || allowed.some(a => origin.startsWith(a.replace(/\/$/, '')))) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Allow all in production for now (API key auth is the real gate)
-    }
+    ].filter(Boolean).map(a => a.replace(/\/$/, ''));
+    // No-origin requests (curl, server-to-server, TradingView webhooks) always allowed
+    if (!origin) return callback(null, true);
+    const ok = allowed.some(a => origin === a || origin.startsWith(a + '/'));
+    if (ok) return callback(null, true);
+    // In dev, allow anything; in prod, reject so cookie auth can't leak.
+    // API-key + signal-key endpoints don't use cookies so they remain reachable from any origin.
+    if (config.isDev) return callback(null, true);
+    return callback(null, false);
   },
   credentials: true,
 }));
@@ -152,13 +155,15 @@ async function start() {
   // If the server restarted, reconnect any listeners that were running
   try {
     const { rows } = await pool.query(
-      `SELECT ls.*, a.credentials_encrypted, a.platform, a.broker_account_id,
+      `SELECT DISTINCT ON (ls.account_id)
+              ls.*, a.credentials_encrypted, a.platform, a.broker_account_id,
               pa.proxy_url, pa.host AS proxy_host, pa.port AS proxy_port,
               pa.proxy_username, pa.proxy_password, pa.ip_address AS proxy_ip
        FROM listener_sessions ls
        JOIN accounts a ON a.id = ls.account_id
        LEFT JOIN proxy_assignments pa ON pa.account_id = a.id
-       WHERE ls.status = 'active'`
+       WHERE ls.status IN ('active', 'restarting')
+       ORDER BY ls.account_id, ls.started_at DESC`
     );
     if (rows.length > 0) {
       console.log(`[STARTUP] Restoring ${rows.length} active listener(s)...`);
@@ -166,7 +171,13 @@ async function start() {
         try {
           let creds = {};
           try { creds = JSON.parse(session.credentials_encrypted || '{}'); } catch {}
-          if (creds.token || creds.loginKey) {
+          // TopStepX needs apiKey to re-auth on restore; Tradovate needs token
+          const hasRequiredCreds =
+            (session.platform === 'topstepx' && creds.apiKey && creds.username) ||
+            (session.platform === 'tradovate' && creds.token) ||
+            (session.platform === 'rithmic' && creds.username && creds.password);
+
+          if (hasRequiredCreds) {
             await listenerManager.startListener({
               userId: session.user_id,
               accountId: session.account_id,
@@ -183,6 +194,12 @@ async function start() {
               } : undefined,
             });
             console.log(`[STARTUP] Restored listener for account ${session.account_id}`);
+          } else {
+            console.warn(`[STARTUP] Skipping restore for account ${session.account_id}: missing credentials (user must reconnect)`);
+            await pool.query(
+              `UPDATE listener_sessions SET status = 'stopped', stopped_at = NOW() WHERE id = $1`,
+              [session.id]
+            );
           }
         } catch (err) {
           console.error(`[STARTUP] Failed to restore listener ${session.account_id}: ${err.message}`);
@@ -192,6 +209,8 @@ async function start() {
           );
         }
       }
+      // Clean up any stragglers still marked 'restarting' (e.g. account was deleted)
+      await pool.query(`UPDATE listener_sessions SET status = 'stopped', stopped_at = NOW() WHERE status = 'restarting'`);
     }
   } catch (err) {
     console.error('[STARTUP] Listener restore failed:', err.message);

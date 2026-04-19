@@ -217,6 +217,24 @@ router.post('/:signalKey', async (req, res) => {
     return res.status(400).json({ error: signal.error, received: req.body });
   }
 
+  // 2a. Idempotency — dedupe identical signals within a 3s window
+  //     (TradingView retries on slow responses; this prevents duplicate orders)
+  const idempotencyKey = crypto.createHash('sha1')
+    .update(`${userId}:${signal.ticker}:${signal.action}:${signal.side}:${signal.qty}:${Math.floor(receivedAt / 3000)}`)
+    .digest('hex')
+    .slice(0, 16);
+  if (!globalThis.__signalIdempotency) globalThis.__signalIdempotency = new Map();
+  const idMap = globalThis.__signalIdempotency;
+  if (idMap.has(idempotencyKey)) {
+    return res.status(200).json({ success: true, deduped: true, message: 'Duplicate signal ignored' });
+  }
+  idMap.set(idempotencyKey, receivedAt);
+  // Evict old entries (keep < 500)
+  if (idMap.size > 500) {
+    const cutoff = receivedAt - 10000;
+    for (const [k, t] of idMap) if (t < cutoff) idMap.delete(k);
+  }
+
   // 3. Find the user's master account
   const masterResult = await query(
     `SELECT a.*, pa.ip_address FROM accounts a
@@ -233,71 +251,22 @@ router.post('/:signalKey', async (req, res) => {
 
   const master = masterResult.rows[0];
 
+  // 3a. Enforce kill switch BEFORE placing master order
+  const riskRow = await query('SELECT kill_switch FROM risk_rules WHERE user_id = $1', [userId]);
+  if (riskRow.rows[0]?.kill_switch) {
+    await logSignal(userId, master.id, 'KILL_SWITCH', req.body, 'Kill switch enabled');
+    return res.status(403).json({ error: 'Kill switch enabled — signals rejected' });
+  }
+
   // 4. Resolve contract ID for the master's platform
   const normalizedTicker = normalizeTicker(signal.ticker) || signal.ticker;
   const contractInfo = getContractInfo(normalizedTicker);
   const contractId = resolveContractId(normalizedTicker, master.platform);
 
-  // 5. Place order on master account
+  // 5. Place order on master account (with token re-auth on 401)
   let masterOrderResult;
   try {
-    const creds = JSON.parse(master.credentials_encrypted || '{}');
-
-    if (master.platform === 'topstepx') {
-      // Place via TopStepX REST API
-      const orderBody = {
-        accountId: parseInt(master.broker_account_id),
-        contractId: contractId, // String like "CON.F.US.MNQ.M26"
-        type: signal.orderType === 'Market' ? 2 : signal.orderType === 'Limit' ? 1 : 4,
-        side: signal.side === 'Buy' ? 0 : 1,
-        size: signal.qty,
-      };
-      if (signal.orderType === 'Limit' && signal.price) orderBody.limitPrice = signal.price;
-      if (signal.orderType === 'Stop' && signal.price) orderBody.stopPrice = signal.price;
-
-      const orderRes = await fetch('https://api.topstepx.com/api/Order/place', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${creds.token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'text/plain',
-        },
-        body: JSON.stringify(orderBody),
-      });
-      const orderData = await orderRes.json();
-
-      if (!orderData.success) {
-        throw new Error(orderData.errorMessage || `Order rejected (code ${orderData.errorCode})`);
-      }
-      masterOrderResult = { orderId: orderData.orderId, platform: 'topstepx' };
-
-    } else if (master.platform === 'tradovate') {
-      // Place via Tradovate REST API
-      const baseUrl = 'https://demo.tradovateapi.com/v1';
-      const orderRes = await fetch(`${baseUrl}/order/placeorder`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${creds.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accountSpec: master.broker_account_id,
-          accountId: parseInt(master.broker_account_id),
-          action: signal.side === 'Buy' ? 'Buy' : 'Sell',
-          symbol: contractId,
-          orderQty: signal.qty,
-          orderType: signal.orderType,
-          isAutomated: true,
-        }),
-      });
-      const orderData = await orderRes.json();
-      if (orderData.failureReason) {
-        throw new Error(orderData.failureReason);
-      }
-      masterOrderResult = { orderId: orderData.orderId, platform: 'tradovate' };
-    } else {
-      throw new Error(`Signal execution not supported for platform: ${master.platform}`);
-    }
+    masterOrderResult = await placeMasterOrder(master, signal, contractId);
   } catch (err) {
     await logSignal(userId, master.id, 'MASTER_ORDER_FAILED', req.body, err.message);
     return res.status(500).json({
@@ -373,5 +342,102 @@ async function logSignal(userId, masterAccountId, status, payload, error, detail
     console.error('[SIGNAL] Failed to log signal:', err.message);
   }
 }
+
+// ── Master order placement with token re-auth ───────────────────────────────
+
+async function placeMasterOrder(master, signal, contractId) {
+  let creds = {};
+  try { creds = JSON.parse(master.credentials_encrypted || '{}'); } catch {}
+
+  if (master.platform === 'topstepx') {
+    const orderBody = {
+      accountId: parseInt(master.broker_account_id),
+      contractId,
+      type: signal.orderType === 'Market' ? 2 : signal.orderType === 'Limit' ? 1 : 4,
+      side: signal.side === 'Buy' ? 0 : 1,
+      size: signal.qty,
+    };
+    if (signal.orderType === 'Limit' && signal.price) orderBody.limitPrice = signal.price;
+    if (signal.orderType === 'Stop' && signal.price) orderBody.stopPrice = signal.price;
+
+    const doPlace = async (token) => {
+      const r = await fetch('https://api.topstepx.com/api/Order/place', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'text/plain',
+        },
+        body: JSON.stringify(orderBody),
+      });
+      return { status: r.status, data: await r.json().catch(() => ({})) };
+    };
+
+    let { status, data } = await doPlace(creds.token);
+
+    // Token expired? Re-auth using stored apiKey + username
+    const looksExpired = status === 401 || data?.errorCode === 3 || /token|unauth|expired/i.test(data?.errorMessage || '');
+    if (looksExpired && creds.apiKey && creds.username) {
+      try {
+        const authRes = await fetch('https://api.topstepx.com/api/Auth/loginKey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'text/plain' },
+          body: JSON.stringify({ userName: creds.username, apiKey: creds.apiKey }),
+        });
+        const authData = await authRes.json();
+        if (authData.success && authData.token) {
+          creds.token = authData.token;
+          await query(
+            'UPDATE accounts SET credentials_encrypted = $1 WHERE id = $2',
+            [JSON.stringify(creds), master.id]
+          );
+          ({ status, data } = await doPlace(creds.token));
+        } else {
+          throw new Error(`Re-auth failed: ${authData.errorMessage || 'unknown'}`);
+        }
+      } catch (err) {
+        throw new Error(`TopStepX session expired and re-auth failed: ${err.message}`);
+      }
+    }
+
+    if (!data.success) {
+      throw new Error(data.errorMessage || `Order rejected (code ${data.errorCode})`);
+    }
+    return { orderId: data.orderId, platform: 'topstepx' };
+  }
+
+  if (master.platform === 'tradovate') {
+    const isLive = creds.isLive === true || creds.environment === 'live';
+    const baseUrl = isLive ? 'https://live.tradovateapi.com/v1' : 'https://demo.tradovateapi.com/v1';
+    const orderRes = await fetch(`${baseUrl}/order/placeorder`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${creds.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        accountSpec: master.broker_account_id,
+        accountId: parseInt(master.broker_account_id),
+        action: signal.side === 'Buy' ? 'Buy' : 'Sell',
+        symbol: contractId,
+        orderQty: signal.qty,
+        orderType: signal.orderType,
+        isAutomated: true,
+      }),
+    });
+    const orderData = await orderRes.json();
+    if (orderRes.status === 401 || orderData.failureReason === 'Unauthorized') {
+      throw new Error('Tradovate session expired — please reconnect your account');
+    }
+    if (orderData.failureReason) {
+      throw new Error(orderData.failureReason);
+    }
+    return { orderId: orderData.orderId, platform: 'tradovate' };
+  }
+
+  throw new Error(`Signal execution not supported for platform: ${master.platform}`);
+}
+
+export default router;
 
 export default router;
