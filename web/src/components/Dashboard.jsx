@@ -549,6 +549,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
 
   const handleFinish = async () => {
     // Save account to DB so it persists across sessions
+    setAuthError(null);
     try {
       setLaunchPhase("saving");
 
@@ -567,8 +568,20 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
           }),
         }),
       });
-      const saveData = await saveRes.json();
-      if (!saveRes.ok) throw new Error(saveData.message || saveData.error);
+      const saveData = await saveRes.json().catch(() => ({}));
+
+      // 409 = master already connected. Treat as success so the user isn't
+      // stuck on the Launch screen after a previous connection.
+      if (saveRes.status === 409 && role === "master") {
+        setLaunchPhase("complete");
+        setTimeout(() => {
+          onStartListener?.();
+          onClose();
+        }, 800);
+        return;
+      }
+
+      if (!saveRes.ok) throw new Error(saveData.message || saveData.error || `Request failed (${saveRes.status})`);
 
       const acc = {
         id: saveData.account?.id || `acc_${Date.now()}`,
@@ -604,6 +617,7 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
         onClose();
       }, 1500);
     } catch (err) {
+      console.error("[ConnectModal] handleFinish failed:", err);
       setAuthError(`Failed to save account: ${err.message}`);
       setLaunchPhase("ready");
     }
@@ -988,8 +1002,14 @@ function ConnectModal({ onClose, onConnect, existingMaster, onStartListener, oau
                       <div className="launch-ready-title">Master Listener Active</div>
                       <div className="launch-ready-sub">Watching {selectedBrokerAccount?.name || label} via {assignedIP}</div>
                     </div>
-                    <button className="btn-primary" onClick={handleFinish}>
-                      <span>Go to Dashboard</span>
+                    {authError && <div className="auth-screen-error" style={{marginRight: 12, maxWidth: 260}}>{authError}</div>}
+                    <button
+                      className="btn-primary"
+                      onClick={handleFinish}
+                      disabled={launchPhase === "saving" || launchPhase === "complete"}
+                      style={(launchPhase === "saving" || launchPhase === "complete") ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
+                    >
+                      <span>{launchPhase === "saving" ? "Saving…" : launchPhase === "complete" ? "Done" : "Go to Dashboard"}</span>
                       <span className="btn-aw"><span className="btn-ar">&#8594;</span></span>
                     </button>
                   </div>

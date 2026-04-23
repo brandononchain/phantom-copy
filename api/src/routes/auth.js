@@ -6,6 +6,7 @@ import QRCode from 'qrcode';
 import { query } from '../db/pool.js';
 import { config } from '../config/index.js';
 import { authRequired } from '../middleware/auth.js';
+import { encryptJSON, decryptJSON } from '../services/crypto.js';
 import { sendWelcomeEmail, sendPasswordResetEmail, sendPasswordChangedEmail, send2FASetupEmail, send2FADisabledEmail } from '../services/email.js';
 
 const router = Router();
@@ -73,8 +74,14 @@ router.post('/login', async (req, res) => {
       if (!totp_code) {
         return res.status(200).json({ requires_2fa: true, message: 'Enter your 2FA code' });
       }
+      let totpSecret;
+      try {
+        totpSecret = decryptJSON(user.totp_secret).secret;
+      } catch {
+        totpSecret = user.totp_secret; // legacy plaintext fallback
+      }
       const verified = speakeasy.totp.verify({
-        secret: user.totp_secret,
+        secret: totpSecret,
         encoding: 'base32',
         token: totp_code,
         window: 1,
@@ -222,9 +229,9 @@ router.post('/2fa/setup', authRequired, async (req, res) => {
       issuer: 'Tradevanish',
     });
 
-    // Store the secret temporarily (not enabled yet until verified)
+    // Store the secret temporarily encrypted (not enabled yet until verified)
     await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(255), ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false`).catch(() => {});
-    await query('UPDATE users SET totp_secret = $1 WHERE id = $2', [secret.base32, req.user.id]);
+    await query('UPDATE users SET totp_secret = $1 WHERE id = $2', [encryptJSON({ secret: secret.base32 }), req.user.id]);
 
     const qrDataUrl = await QRCode.toDataURL(secret.otpauth_url);
 
@@ -248,8 +255,15 @@ router.post('/2fa/verify', authRequired, async (req, res) => {
     if (user.rows[0].totp_enabled) return res.status(400).json({ error: '2FA is already enabled' });
     if (!user.rows[0].totp_secret) return res.status(400).json({ error: 'Call /2fa/setup first' });
 
+    let totpSecret;
+    try {
+      totpSecret = decryptJSON(user.rows[0].totp_secret).secret;
+    } catch {
+      totpSecret = user.rows[0].totp_secret; // legacy plaintext fallback
+    }
+
     const verified = speakeasy.totp.verify({
-      secret: user.rows[0].totp_secret,
+      secret: totpSecret,
       encoding: 'base32',
       token: code,
       window: 1,
@@ -259,8 +273,9 @@ router.post('/2fa/verify', authRequired, async (req, res) => {
 
     await query('UPDATE users SET totp_enabled = true WHERE id = $1', [req.user.id]);
 
-    // Send confirmation email
-    send2FASetupEmail(user.rows[0].email, user.rows[0].name).catch(() => {});
+    // Send confirmation email (fire-and-forget; don't block response on SMTP)
+    Promise.resolve(send2FASetupEmail(user.rows[0].email, user.rows[0].name))
+      .catch(err => console.error('[AUTH] 2FA setup email failed:', err.message));
 
     res.json({ success: true, message: '2FA has been enabled on your account' });
   } catch (err) {
@@ -278,7 +293,10 @@ router.post('/2fa/disable', authRequired, async (req, res) => {
     const valid = await bcrypt.compare(password, user.rows[0].password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid password' });
 
-    await query('UPDATE users SET totp_secret = NULL, totp_enabled = false WHERE id = $1', [req.user.id]); const u2 = await query('SELECT email, name FROM users WHERE id = $1', [req.user.id]); send2FADisabledEmail(u2.rows[0].email, u2.rows[0].name).catch(() => {});
+    await query('UPDATE users SET totp_secret = NULL, totp_enabled = false WHERE id = $1', [req.user.id]);
+    const u2 = await query('SELECT email, name FROM users WHERE id = $1', [req.user.id]);
+    Promise.resolve(send2FADisabledEmail(u2.rows[0].email, u2.rows[0].name))
+      .catch(err => console.error('[AUTH] 2FA disable email failed:', err.message));
     res.json({ success: true, message: '2FA has been disabled' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to disable 2FA' });
@@ -289,7 +307,8 @@ router.post('/2fa/disable', authRequired, async (req, res) => {
 
 router.post('/admin/upgrade', async (req, res) => {
   const { email, plan, adminKey, newPassword } = req.body;
-  if (adminKey !== 'pc_admin_2026') return res.status(403).json({ error: 'Forbidden' });
+  const expectedKey = process.env.ADMIN_SECRET_KEY;
+  if (!expectedKey || adminKey !== expectedKey) return res.status(403).json({ error: 'Forbidden' });
 
   try {
     const updates = [];
