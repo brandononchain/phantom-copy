@@ -1,0 +1,21 @@
+name: API Health Probe
+
+on:
+  schedule:
+    # Every 5 minutes
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Ping /api/health
+        env:
+          HEALTH_URL: https://api-production-e175.up.railway.app/api/health
+          HEALTH_THRESHOLD_MS: "800"
+        run: node api/scripts/health-probe.mjs

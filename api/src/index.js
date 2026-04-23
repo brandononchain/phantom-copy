@@ -29,6 +29,10 @@ import { startTokenRefreshLoop, stopTokenRefreshLoop } from './services/token-re
 
 const app = express();
 
+// Railway terminates TLS and forwards via X-Forwarded-For.
+// Trust the first hop so express-rate-limit can identify clients correctly.
+app.set('trust proxy', 1);
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -70,17 +74,32 @@ app.use('/api/', rateLimit({
 
 // ── Health ────────────────────────────────────────────────────────────────────
 
+// Threshold (ms) above which the health check emits a [HEALTH-SLOW] log line.
+// Railway/Grafana/pager log-based alerts can match on this prefix.
+const HEALTH_SLOW_MS = parseInt(process.env.HEALTH_SLOW_MS || '500', 10);
+
 app.get('/api/health', async (req, res) => {
+  const t0 = Date.now();
   try {
-    const dbCheck = await pool.query('SELECT 1');
+    const dbStart = Date.now();
+    await pool.query('SELECT 1');
+    const dbMs = Date.now() - dbStart;
+
     const listenerStatus = listenerManager?.getStatus?.() || { activeSessions: 0 };
     const copyStats = copyEngine?.getStats?.() || {};
     const queueStats = await getQueueStats().catch(() => ({ mode: 'inline' }));
+    const totalMs = Date.now() - t0;
+
+    if (dbMs > HEALTH_SLOW_MS || totalMs > HEALTH_SLOW_MS) {
+      console.warn(`[HEALTH-SLOW] db=${dbMs}ms total=${totalMs}ms threshold=${HEALTH_SLOW_MS}ms`);
+    }
+
     res.json({
       status: 'healthy',
       ts: new Date().toISOString(),
       v: '1.1.0',
       db: 'connected',
+      latency: { dbMs, totalMs },
       listeners: listenerStatus,
       copyEngine: {
         totalSignals: copyStats.totalSignals || 0,
@@ -92,6 +111,7 @@ app.get('/api/health', async (req, res) => {
       memory: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
     });
   } catch (err) {
+    console.error(`[HEALTH-FAIL] ${err.message}`);
     res.status(503).json({ status: 'unhealthy', error: err.message });
   }
 });
@@ -145,8 +165,15 @@ async function start() {
 
   // ── Initialize Redis Queue (optional, degrades gracefully) ───────────────
   const redisReady = initRedis();
-  if (redisReady) {
+  // SERVICE_ROLE:
+  //   'api'    → HTTP + listener-manager only; BullMQ worker runs in a separate service
+  //   'worker' → handled by src/worker.js (never reaches here)
+  //   unset    → backward-compatible single-process mode (both)
+  const role = (process.env.SERVICE_ROLE || 'both').toLowerCase();
+  if (redisReady && role !== 'api') {
     startWorker(copyEngine);
+  } else if (redisReady) {
+    console.log('[API] SERVICE_ROLE=api — BullMQ worker disabled in this process');
   }
 
   // ── Start Tradovate Token Refresh Loop ───────────────────────────────────

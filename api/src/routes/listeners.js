@@ -3,16 +3,17 @@ import { query } from '../db/pool.js';
 import { authRequired } from '../middleware/auth.js';
 import { listenerManager } from '../services/listener-manager.js';
 import { copyEngine } from '../services/copy-engine.js';
+import { decryptJSON } from '../services/crypto.js';
 
 const router = Router();
 
 // ── Start master listener ─────────────────────────────────────────────────────
 
 router.post('/start', authRequired, async (req, res) => {
-  const { accountId, credentials } = req.body;
+  const { accountId, credentials: credsOverride } = req.body;
 
-  if (!accountId || !credentials) {
-    return res.status(400).json({ error: 'accountId and credentials required' });
+  if (!accountId) {
+    return res.status(400).json({ error: 'accountId required' });
   }
 
   // Verify account belongs to user and is a master
@@ -22,6 +23,43 @@ router.post('/start', authRequired, async (req, res) => {
   );
   if (acct.rows.length === 0) return res.status(404).json({ error: 'Account not found' });
   if (acct.rows[0].role !== 'master') return res.status(400).json({ error: 'Can only start listener on master accounts' });
+
+  const account = acct.rows[0];
+  const platform = account.platform;
+
+  // Hydrate credentials from DB. The accounts API never echoes the decrypted
+  // creds to the client, so the frontend can't send them directly. We load
+  // them here from:
+  //   1) accounts.credentials_encrypted  (encrypted JSON blob)
+  //   2) broker_tokens                   (latest OAuth access token)
+  // Optional req.body.credentials fields override (useful for re-auth flows).
+  let credentials = {};
+  if (account.credentials_encrypted) {
+    try {
+      credentials = decryptJSON(account.credentials_encrypted) || {};
+    } catch (err) {
+      console.error('[LISTENERS] decrypt creds failed:', err.message);
+    }
+  }
+
+  if (platform === 'tradovate' || platform === 'ninjatrader') {
+    const tok = await query(
+      `SELECT access_token, expires_at FROM broker_tokens
+       WHERE account_id = $1 ORDER BY last_refreshed_at DESC NULLS LAST, id DESC LIMIT 1`,
+      [accountId]
+    );
+    if (tok.rows[0]?.access_token) {
+      credentials.token = tok.rows[0].access_token;
+    }
+    // Ensure brokerAccountId and userId are populated from the account row
+    credentials.brokerAccountId = credentials.brokerAccountId || account.broker_account_id;
+    credentials.userId = credentials.userId || credentials.brokerUserId || account.broker_account_id;
+  }
+
+  // Apply any client-supplied overrides last
+  if (credsOverride && typeof credsOverride === 'object') {
+    credentials = { ...credentials, ...credsOverride };
+  }
 
   // Get proxy assignment for this account
   const proxyResult = await query(
@@ -34,13 +72,14 @@ router.post('/start', authRequired, async (req, res) => {
     const result = await listenerManager.startListener({
       userId: req.user.id,
       accountId: parseInt(accountId),
-      platform: acct.rows[0].platform,
+      platform,
       credentials,
       proxyAssignment,
     });
 
     res.json(result);
   } catch (err) {
+    console.error('[LISTENERS] start failed:', err.stack || err.message);
     res.status(500).json({ error: 'Failed to start listener', message: err.message });
   }
 });
@@ -137,11 +176,11 @@ router.get('/stats', authRequired, async (req, res) => {
   });
 });
 
-// ── System status (admin-level) ───────────────────────────────────────────────
+// ── System status (user-scoped) ───────────────────────────────────────────────
 
 router.get('/status', authRequired, async (req, res) => {
-  const status = listenerManager.getStatus();
-  res.json(status);
+  const sessions = listenerManager.getActiveSessions(req.user.id);
+  res.json({ activeSessions: sessions.length, sessions });
 });
 
 export default router;

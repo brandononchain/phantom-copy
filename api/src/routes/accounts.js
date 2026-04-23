@@ -4,6 +4,7 @@ import { authRequired, requirePlan } from '../middleware/auth.js';
 import { sendAccountConnectedEmail } from '../services/email.js';
 import { encryptJSON } from '../services/crypto.js';
 import { storeToken } from '../services/token-refresh.js';
+import { listenerManager } from '../services/listener-manager.js';
 
 const router = Router();
 
@@ -18,7 +19,9 @@ router.get('/', authRequired, async (req, res) => {
      ORDER BY a.role DESC, a.created_at`,
     [req.user.id]
   );
-  res.json({ accounts: result.rows });
+  // Never echo the encrypted creds blob to clients
+  const accounts = result.rows.map(({ credentials_encrypted, ...rest }) => rest);
+  res.json({ accounts });
 });
 
 // ── Connect account ───────────────────────────────────────────────────────────
@@ -110,10 +113,19 @@ router.delete('/:id', authRequired, async (req, res) => {
     if (acct.rows.length === 0) return res.status(404).json({ error: 'Account not found' });
 
     if (acct.rows[0].role === 'master') {
+      // Stop the in-memory listener first so it doesn't keep copying trades
+      await listenerManager.stopByAccount(parseInt(req.params.id)).catch(() => {});
       await query('UPDATE listener_sessions SET status = $1, stopped_at = NOW() WHERE account_id = $2 AND status = $3', ['stopped', req.params.id, 'active']);
     }
 
-    // Clean up related data
+    // Clean up related data (listener_sessions + listener_events lack ON DELETE CASCADE,
+    // so remove them explicitly before deleting the account row).
+    await query(
+      `DELETE FROM listener_events WHERE session_id IN
+         (SELECT id FROM listener_sessions WHERE account_id = $1)`,
+      [req.params.id]
+    ).catch(() => {});
+    await query('DELETE FROM listener_sessions WHERE account_id = $1', [req.params.id]).catch(() => {});
     await query('DELETE FROM follower_overrides WHERE account_id = $1', [req.params.id]);
     await query('DELETE FROM proxy_assignments WHERE account_id = $1', [req.params.id]);
     await query('DELETE FROM broker_tokens WHERE account_id = $1', [req.params.id]).catch(() => {});
