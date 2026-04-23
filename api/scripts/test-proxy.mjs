@@ -38,9 +38,17 @@ async function resolveIp(dispatcher, label) {
   const t = setTimeout(() => ac.abort(), 15000);
   try {
     const res = await uFetch('https://api.ipify.org?format=json', { dispatcher, signal: ac.signal });
-    const body = await res.json();
-    ok(`${label}: ${body.ip}  (HTTP ${res.status})`);
-    return body.ip;
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch { /* non-JSON response */ }
+    if (parsed?.ip) {
+      ok(`${label}: ${parsed.ip}  (HTTP ${res.status})`);
+      return parsed.ip;
+    }
+    fail(`${label}: HTTP ${res.status} — non-JSON body (${text.length} bytes)`);
+    if (text.length > 0) console.error('  body:', text.slice(0, 500));
+    else console.error('  body: <empty>  (common causes: IP not whitelisted, zone paused, quota exhausted)');
+    return null;
   } catch (err) {
     fail(`${label}: ${err.cause?.code || err.code || err.message}`);
     if (err.cause) console.error('  cause:', err.cause);
@@ -70,7 +78,7 @@ async function main() {
   ok(`Proxy URL built (session=${sessionId} region=${REGION})`);
 
   // 4) Request through proxy
-  const dispatcher = new ProxyAgent(proxyUrl);
+  const dispatcher = new ProxyAgent({ uri: proxyUrl, requestTls: { rejectUnauthorized: false } });
   const ip = await resolveIp(dispatcher, 'Via BrightData');
 
   if (ip) {

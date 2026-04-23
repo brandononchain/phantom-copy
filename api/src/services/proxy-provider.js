@@ -9,6 +9,13 @@
 import { ProxyAgent } from 'undici';
 import { config } from '../config/index.js';
 
+// BrightData (and most residential providers) terminate TLS with their own CA
+// to inspect traffic. Node rejects that by default. Accept their cert since
+// we're already routing through them intentionally.
+function makeProxyAgent(uri) {
+  return new ProxyAgent({ uri, requestTls: { rejectUnauthorized: false } });
+}
+
 // ── Region-to-country mapping ────────────────────────────────────────────────
 
 const REGION_MAP = {
@@ -137,7 +144,7 @@ export async function assignProxy({ provider = 'brightdata', region = 'us-east',
   // Resolve actual external IP through the proxy using undici ProxyAgent
   let externalIp = null;
   try {
-    const dispatcher = new ProxyAgent(proxyConfig.url);
+    const dispatcher = makeProxyAgent(proxyConfig.url);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
@@ -182,7 +189,7 @@ export function createProxyAgent(proxyAssignment) {
 
   const url = proxyAssignment.proxyUrl ||
     `http://${proxyAssignment.username}:${proxyAssignment.password}@${proxyAssignment.host}:${proxyAssignment.port}`;
-  return new ProxyAgent(url);
+  return makeProxyAgent(url);
 }
 
 /**
@@ -193,7 +200,7 @@ export async function checkProxyHealth(proxyUrl) {
     return { healthy: true, latency: 0, ip: 'direct', simulated: true };
   }
 
-  const dispatcher = new ProxyAgent(proxyUrl);
+  const dispatcher = makeProxyAgent(proxyUrl);
   const start = Date.now();
 
   try {
