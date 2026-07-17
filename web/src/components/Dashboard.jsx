@@ -1228,8 +1228,8 @@ function OverviewPage({ accounts, onOpenConnect, listenerState, expandedTrade, s
       </div>
 
       <div className="stats">
-        <div className="st-card"><div className="st-eye">TOTAL BALANCE</div><div className="st-val c-grn">{totalBalance > 0 ? <AnimNum value={totalBalance} prefix="$" /> : <span style={{color:"var(--t3)"}}>$0.00</span>}</div><div className="st-sub">{totalPnl >= 0 ? "+" : ""}{totalPnl !== 0 ? `$${Math.abs(totalPnl).toLocaleString(undefined,{minimumFractionDigits:2})} today` : "No trades yet"}</div></div>
-        <div className="st-card"><div className="st-eye">ACTIVE FOLLOWERS</div><div className="st-val c-blu"><AnimNum value={followers.length} dec={0} /></div><div className="st-sub">across {platforms || 0} platform{platforms !== 1 ? "s" : ""}</div></div>
+        <div className="st-card"><div className="st-eye">TOTAL BALANCE</div><div className="st-val c-grn">{totalBalance > 0 ? <AnimNum value={totalBalance} prefix="$" /> : <span style={{color:"var(--t3)"}}>$0.00</span>}</div><div className="st-sub">{totalPnl !== 0 ? `${totalPnl >= 0 ? "+" : "-"}$${Math.abs(totalPnl).toLocaleString(undefined,{minimumFractionDigits:2})} today` : "No trades yet"}</div></div>
+        <div className="st-card"><div className="st-eye">ACTIVE FOLLOWERS</div><div className="st-val"><AnimNum value={followers.length} dec={0} /></div><div className="st-sub">across {platforms || 0} platform{platforms !== 1 ? "s" : ""}</div></div>
         <div className="st-card"><div className="st-eye">TODAY'S TRADES</div><div className="st-val"><AnimNum value={totalTrades} dec={0} /></div><div className="st-sub">{active} accounts copying</div></div>
         <div className="st-card">
           <div className="st-eye">COPY LATENCY</div>
@@ -1244,6 +1244,13 @@ function OverviewPage({ accounts, onOpenConnect, listenerState, expandedTrade, s
         <div className="tbl-w"><table className="tbl">
           <thead><tr><th></th><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>Copied To</th><th>P&L</th></tr></thead>
           <tbody>
+            {INITIAL_TRADES.length === 0 && (
+              <tr className="tbl-empty"><td colSpan="9"><div className="tbl-empty-in">
+                <div className="tbl-empty-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                <div className="tbl-empty-t">No trades yet</div>
+                <div className="tbl-empty-s">Master trades replicate here in real time once your listener is running and your master account executes.</div>
+              </div></td></tr>
+            )}
             {INITIAL_TRADES.map((t, i) => [
                 <tr key={`row-${t.id}`} className="tbl-r tbl-r-click" style={{ animationDelay: `${i * 50}ms` }} onClick={() => setExpandedTrade(expandedTrade === t.id ? null : t.id)}>
                   <td style={{ width: 30 }}>
@@ -1374,6 +1381,13 @@ function TradeLogPage({ accounts }) {
             <th>P&L</th>
           </tr></thead>
           <tbody>
+            {filtered.length === 0 && (
+              <tr className="tbl-empty"><td colSpan="11"><div className="tbl-empty-in">
+                <div className="tbl-empty-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                <div className="tbl-empty-t">No executions yet</div>
+                <div className="tbl-empty-s">Every copied trade lands here with per-follower fill receipts, latency, slippage, and the IP each order routed through.</div>
+              </div></td></tr>
+            )}
             {filtered.map((t, i) => [
               <tr key={`r-${t.id}`} className="tbl-r tbl-r-click" style={{ animationDelay: `${i * 40}ms` }} onClick={() => setExpanded(expanded === t.id ? null : t.id)}>
                 <td>
@@ -3698,6 +3712,11 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .tbl-r{animation:fsu 0.5s var(--ease) both;transition:background 0.2s}.tbl-r:hover{background:rgba(255,255,255,0.02)}
 .tbl-r-click{cursor:pointer}
 .tbl-expand td{padding:0!important;background:rgba(99,102,241,0.03)}
+.tbl-empty td{padding:0!important;border-bottom:none!important}
+.tbl-empty-in{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:48px 24px;text-align:center}
+.tbl-empty-ic{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.03);border:1px solid var(--bdr);color:var(--t3);margin-bottom:4px}
+.tbl-empty-t{font-size:13px;font-weight:600;color:var(--t2)}
+.tbl-empty-s{font-size:12px;color:var(--t3);max-width:340px;line-height:1.5}
 .expand-content{padding:16px 24px 20px 46px}
 .expand-title{font-size:10px;font-weight:600;letter-spacing:0.1em;color:var(--t3);text-transform:uppercase;margin-bottom:10px}
 .expand-fills{display:flex;flex-direction:column;gap:6px}
