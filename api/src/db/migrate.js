@@ -101,7 +101,6 @@ const migrations = [
     id: '007_scalability',
     up: `
       CREATE INDEX IF NOT EXISTS idx_proxy_assignments_account ON proxy_assignments(account_id);
-      CREATE INDEX IF NOT EXISTS idx_proxy_assignments_user ON proxy_assignments(user_id);
       CREATE INDEX IF NOT EXISTS idx_webhooks_user ON webhooks(user_id);
       CREATE INDEX IF NOT EXISTS idx_listener_sessions_user ON listener_sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_listener_sessions_account ON listener_sessions(account_id);
@@ -150,6 +149,7 @@ const migrations = [
       ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS proxy_password TEXT;
       ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS host VARCHAR(255);
       ALTER TABLE proxy_assignments ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+      CREATE INDEX IF NOT EXISTS idx_proxy_assignments_user ON proxy_assignments(user_id);
     `,
     down: `SELECT 1;`,
   },

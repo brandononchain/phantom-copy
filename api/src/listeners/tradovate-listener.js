@@ -20,8 +20,10 @@ import crypto from 'crypto';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
-const TRADOVATE_WS_URL = 'wss://live.tradovateapi.com/v1/websocket';
-const TRADOVATE_API_URL = 'https://live.tradovateapi.com/v1';
+const TRADOVATE_ENDPOINTS = {
+  live: { ws: 'wss://live.tradovateapi.com/v1/websocket', api: 'https://live.tradovateapi.com/v1' },
+  demo: { ws: 'wss://demo.tradovateapi.com/v1/websocket', api: 'https://demo.tradovateapi.com/v1' },
+};
 const TRADOVATE_TOKEN_REFRESH_MS = 85 * 60 * 1000; // Refresh at 85 min (expires at 90)
 
 // ─── Proxy Agent Factory ─────────────────────────────────────────────────────
@@ -32,7 +34,7 @@ function createProxyAgent(proxyConfig) {
   // {
   //   host: 'brd.superproxy.io',
   //   port: 22225,
-  //   username: 'brd-customer-XXXX-zone-residential-session-phantom_acc01-country-us',
+  //   username: 'brd-customer-XXXX-zone-residential-session-tv_acc01-country-us',
   //   password: 'proxy_password'
   // }
   const url = `http://${proxyConfig.username}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
@@ -69,11 +71,14 @@ function decryptToken(encrypted, ivHex, tagHex) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class TradovateMasterListener extends EventEmitter {
-  constructor({ accessToken, userId, accountId, proxyConfig, db }) {
+  constructor({ accessToken, userId, accountId, proxyConfig, db, isLive = false }) {
     super();
     this.accessToken = accessToken;
     this.userId = userId;
     this.accountId = accountId; // Tradovate account ID (number)
+    const endpoints = isLive ? TRADOVATE_ENDPOINTS.live : TRADOVATE_ENDPOINTS.demo;
+    this.wsUrl = endpoints.ws;
+    this.apiUrl = endpoints.api;
     this.wsProxyAgent = createProxyAgent(proxyConfig); // For ws library
     this.httpProxyAgent = this.createUnidiciAgent(proxyConfig); // For REST calls via undici
     this.db = db;
@@ -146,7 +151,7 @@ export class TradovateMasterListener extends EventEmitter {
 
   connectWebSocket() {
     return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(TRADOVATE_WS_URL, {
+      this.ws = new WebSocket(this.wsUrl, {
         agent: this.wsProxyAgent, // All traffic routed through dedicated IP
         headers: {
           'User-Agent': 'Tradevanish/1.0',
@@ -528,7 +533,7 @@ export class TradovateMasterListener extends EventEmitter {
     };
     if (this.httpProxyAgent) opts.dispatcher = this.httpProxyAgent;
 
-    const response = await undiFetch(`${TRADOVATE_API_URL}${path}`, opts);
+    const response = await undiFetch(`${this.apiUrl}${path}`, opts);
 
     if (!response.ok) {
       throw new Error(`Tradovate API ${method} ${path}: ${response.status}`);
@@ -639,371 +644,4 @@ export class TradovateMasterListener extends EventEmitter {
     this.emit('stopped', { reason: 'user' });
     this.emit('event', { type: 'shutdown', msg: 'Master listener stopped' });
   }
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// COPY EXECUTOR
-// ─────────────────────────────────────────────────────────────────────────────
-// Receives copy signals from the master listener and fans out
-// to all follower accounts, each through its own proxy.
-
-export class CopyExecutor extends EventEmitter {
-  constructor({ db, proxyManager }) {
-    super();
-    this.db = db;
-    this.proxyManager = proxyManager;
-    this.followerClients = new Map(); // accountId -> TradovateFollowerClient
-  }
-
-  // Initialize follower clients with their assigned proxies
-  async initFollowers(followers) {
-    for (const follower of followers) {
-      const proxy = await this.proxyManager.getProxyForAccount(follower.id);
-      const agent = createProxyAgent(proxy);
-      const token = decryptToken(
-        follower.encrypted_token,
-        follower.token_iv,
-        follower.token_tag
-      );
-
-      this.followerClients.set(follower.id, {
-        accountId: follower.broker_account_id,
-        accessToken: token,
-        agent,
-        riskRules: follower.risk_rules || {},
-        proxyIP: proxy.externalIP,
-        platform: follower.platform,
-      });
-    }
-  }
-
-  // Handle copy signal from master listener
-  async executeCopy(signal) {
-    const { action, side, qty, price, contractId } = signal;
-    const startTime = performance.now();
-    const followers = Array.from(this.followerClients.entries());
-
-    // Fan out to all followers in parallel
-    const results = await Promise.allSettled(
-      followers.map(async ([followerId, client]) => {
-        // Apply risk rules
-        const adjQty = this.applyRiskRules(client.riskRules, qty, followerId);
-        if (adjQty === 0) {
-          return { followerId, skipped: true, reason: 'risk-filter' };
-        }
-
-        const orderStart = performance.now();
-
-        try {
-          // Place order through follower's dedicated proxy
-          const orderResponse = await fetch(
-            `${TRADOVATE_API_URL}/order/placeorder`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${client.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                accountSpec: client.accountId.toString(),
-                accountId: parseInt(client.accountId),
-                action: side,
-                symbol: contractId, // Resolve to symbol name
-                orderQty: adjQty,
-                orderType: 'Market',
-                isAutomated: true,
-              }),
-              agent: client.agent, // THIS IS THE KEY: each follower uses its own proxy IP
-            }
-          );
-
-          const order = await orderResponse.json();
-          const latency = Math.round(performance.now() - orderStart);
-
-          return {
-            followerId,
-            orderId: order.orderId,
-            fillPrice: order.price,
-            latency,
-            proxyIP: client.proxyIP,
-            slippage: order.price ? Math.abs(order.price - price) : 0,
-          };
-        } catch (error) {
-          return {
-            followerId,
-            error: error.message,
-            latency: Math.round(performance.now() - orderStart),
-            proxyIP: client.proxyIP,
-          };
-        }
-      })
-    );
-
-    const totalLatency = Math.round(performance.now() - startTime);
-    const successful = results.filter(r => r.status === 'fulfilled' && !r.value.error && !r.value.skipped);
-
-    // Log execution
-    await this.db.logCopyExecution({
-      masterSignal: signal,
-      results: results.map(r => r.value || r.reason),
-      totalLatency,
-      successCount: successful.length,
-      totalFollowers: followers.length,
-      timestamp: Date.now(),
-    });
-
-    this.emit('copy-complete', {
-      action,
-      side,
-      qty,
-      price,
-      results: results.map(r => r.value || r.reason),
-      totalLatency,
-    });
-
-    this.emit('event', {
-      type: 'copy',
-      msg: `Copied to ${successful.length}/${followers.length} followers (avg ${Math.round(totalLatency / followers.length)}ms)`,
-    });
-  }
-
-  // Handle bracket order signals (stops, take-profits)
-  async executeBracketCopy(bracketSignal) {
-    const { action, order } = bracketSignal;
-    const followers = Array.from(this.followerClients.entries());
-
-    await Promise.allSettled(
-      followers.map(async ([followerId, client]) => {
-        try {
-          if (action === 'NEW_BRACKET') {
-            await fetch(`${TRADOVATE_API_URL}/order/placeorder`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${client.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                accountId: parseInt(client.accountId),
-                action: order.side,
-                symbol: order.contractId,
-                orderQty: this.applyRiskRules(client.riskRules, order.qty, followerId),
-                orderType: order.type,
-                price: order.price,
-                stopPrice: order.stopPrice,
-                isAutomated: true,
-              }),
-              agent: client.agent,
-            });
-          } else if (action === 'MODIFY_BRACKET') {
-            // Find the corresponding order on this follower
-            // and modify it to match the master's new price
-            await fetch(`${TRADOVATE_API_URL}/order/modifyorder`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${client.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                orderId: await this.findFollowerOrder(followerId, order),
-                orderQty: this.applyRiskRules(client.riskRules, order.qty, followerId),
-                orderType: order.type,
-                price: order.price,
-                stopPrice: order.stopPrice,
-              }),
-              agent: client.agent,
-            });
-          } else if (action === 'CANCEL_BRACKET') {
-            const followerOrderId = await this.findFollowerOrder(followerId, order);
-            if (followerOrderId) {
-              await fetch(`${TRADOVATE_API_URL}/order/cancelorder`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${client.accessToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ orderId: followerOrderId }),
-                agent: client.agent,
-              });
-            }
-          }
-        } catch (error) {
-          this.emit('event', {
-            type: 'error',
-            msg: `Bracket copy failed for ${followerId}: ${error.message}`,
-          });
-        }
-      })
-    );
-  }
-
-  applyRiskRules(rules, masterQty, followerId) {
-    let qty = Math.round(masterQty * (rules.sizeMultiplier || 1));
-    if (rules.maxQty && qty > rules.maxQty) qty = rules.maxQty;
-    if (rules.minQty && qty < rules.minQty) qty = rules.minQty;
-    // Additional checks (daily loss, max trades) would query the DB
-    return Math.max(qty, 0);
-  }
-
-  async findFollowerOrder(followerId, masterOrder) {
-    // Look up the corresponding order on the follower account
-    // by matching contract + side + type
-    return await this.db.findMatchingFollowerOrder(
-      followerId,
-      masterOrder.contractId,
-      masterOrder.side,
-      masterOrder.type
-    );
-  }
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ORCHESTRATOR
-// ─────────────────────────────────────────────────────────────────────────────
-// Wires the master listener to the copy executor.
-// This is the main entry point the API server uses.
-
-export class MasterListenerOrchestrator extends EventEmitter {
-  constructor({ db, proxyManager }) {
-    super();
-    this.db = db;
-    this.proxyManager = proxyManager;
-    this.listener = null;
-    this.executor = null;
-  }
-
-  async start(masterAccountId) {
-    // 1. Load master account from DB
-    const master = await this.db.getAccount(masterAccountId);
-    if (!master || master.role !== 'master') {
-      throw new Error('Account is not configured as master');
-    }
-
-    // 2. Decrypt master's token
-    const accessToken = decryptToken(
-      master.encrypted_token,
-      master.token_iv,
-      master.token_tag
-    );
-
-    // 3. Get master's assigned proxy
-    const masterProxy = await this.proxyManager.getProxyForAccount(master.id);
-
-    // 4. Create master listener
-    if (master.platform === 'Tradovate') {
-      this.listener = new TradovateMasterListener({
-        accessToken,
-        userId: master.broker_user_id,
-        accountId: master.broker_account_id,
-        proxyConfig: masterProxy,
-        db: this.db,
-      });
-    }
-    // else if (master.platform === 'Rithmic') {
-    //   this.listener = new RithmicMasterListener({...});
-    // }
-
-    // 5. Create copy executor and load followers
-    this.executor = new CopyExecutor({
-      db: this.db,
-      proxyManager: this.proxyManager,
-    });
-
-    const followers = await this.db.getFollowers(master.user_id);
-    await this.executor.initFollowers(followers);
-
-    // 6. Wire signals
-    this.listener.on('copy-signal', (signal) => {
-      this.executor.executeCopy(signal);
-    });
-
-    this.listener.on('bracket-signal', (signal) => {
-      this.executor.executeBracketCopy(signal);
-    });
-
-    // Forward all events for the dashboard WebSocket
-    this.listener.on('stage', (stage) => this.emit('stage', stage));
-    this.listener.on('event', (event) => this.emit('event', event));
-    this.listener.on('heartbeat', () => this.emit('heartbeat'));
-    this.listener.on('ready', (state) => this.emit('ready', state));
-    this.listener.on('stopped', (info) => this.emit('stopped', info));
-    this.executor.on('copy-complete', (result) => this.emit('copy-complete', result));
-    this.executor.on('event', (event) => this.emit('event', event));
-
-    // 7. Start the listener
-    await this.listener.start();
-  }
-
-  stop() {
-    if (this.listener) {
-      this.listener.stop();
-      this.listener = null;
-    }
-    this.executor = null;
-  }
-
-  getState() {
-    if (!this.listener) return { state: 'idle' };
-    return {
-      state: this.listener.connected ? 'listening' : 'connecting',
-      positions: Array.from(this.listener.positions.values()),
-      openOrders: Array.from(this.listener.openOrders.values()),
-    };
-  }
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// API ROUTE: /api/listener
-// ─────────────────────────────────────────────────────────────────────────────
-// Express routes to control the master listener from the dashboard.
-
-export function listenerRoutes(app, orchestrator) {
-
-  // Start the master listener
-  app.post('/api/listener/start', async (req, res) => {
-    try {
-      const { masterAccountId } = req.body;
-      await orchestrator.start(masterAccountId);
-      res.json({ status: 'starting' });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Stop the master listener
-  app.post('/api/listener/stop', async (req, res) => {
-    orchestrator.stop();
-    res.json({ status: 'stopped' });
-  });
-
-  // Get current listener state
-  app.get('/api/listener/status', (req, res) => {
-    res.json(orchestrator.getState());
-  });
-
-  // WebSocket endpoint for real-time dashboard updates
-  // The dashboard connects here to get live events
-  app.ws('/ws/listener', (ws, req) => {
-    const onStage = (stage) => ws.send(JSON.stringify({ type: 'stage', stage }));
-    const onEvent = (event) => ws.send(JSON.stringify({ type: 'event', ...event }));
-    const onHeartbeat = () => ws.send(JSON.stringify({ type: 'heartbeat' }));
-    const onReady = (state) => ws.send(JSON.stringify({ type: 'ready', ...state }));
-    const onCopy = (result) => ws.send(JSON.stringify({ type: 'copy-complete', ...result }));
-
-    orchestrator.on('stage', onStage);
-    orchestrator.on('event', onEvent);
-    orchestrator.on('heartbeat', onHeartbeat);
-    orchestrator.on('ready', onReady);
-    orchestrator.on('copy-complete', onCopy);
-
-    ws.on('close', () => {
-      orchestrator.off('stage', onStage);
-      orchestrator.off('event', onEvent);
-      orchestrator.off('heartbeat', onHeartbeat);
-      orchestrator.off('ready', onReady);
-      orchestrator.off('copy-complete', onCopy);
-    });
-  });
 }

@@ -4,7 +4,7 @@
 // Encrypts the JSON blob stored in accounts.credentials_encrypted so broker
 // passwords, API keys, and OAuth tokens are never at rest as plaintext.
 //
-// Key source: process.env.CREDS_KEY (32-byte key, hex or base64).
+// Key source: process.env.CREDS_KEY (falls back to ENCRYPTION_KEY) — 32-byte key, hex or base64.
 // Format on disk: "enc:v1:<iv_b64>:<tag_b64>:<ct_b64>"
 // Backwards-compat: plain JSON (legacy rows) is returned as-is by decryptCreds.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ let cachedKey = null;
 
 function loadKey() {
   if (cachedKey) return cachedKey;
-  const raw = process.env.CREDS_KEY;
+  const raw = process.env.CREDS_KEY || process.env.ENCRYPTION_KEY;
   if (!raw) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('CREDS_KEY environment variable is required in production');

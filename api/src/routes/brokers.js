@@ -120,9 +120,11 @@ router.get('/tradovate/callback', async (req, res) => {
   }
 
   try {
-    // Exchange code for token - try demo first, then live
+    // Exchange code for token - try demo first, then live. Track which one succeeds
+    // so the account is labelled with the environment the token is actually valid for.
     let tokenData;
-    for (const exchangeUrl of [appConfig.tradovate.demoExchangeUrl, appConfig.tradovate.liveExchangeUrl]) {
+    let resolvedEnv = 'demo';
+    for (const [envName, exchangeUrl] of [['demo', appConfig.tradovate.demoExchangeUrl], ['live', appConfig.tradovate.liveExchangeUrl]]) {
       const tokenRes = await fetch(exchangeUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -136,14 +138,14 @@ router.get('/tradovate/callback', async (req, res) => {
       });
 
       tokenData = await tokenRes.json();
-      if (tokenData.access_token) break;
+      if (tokenData.access_token) { resolvedEnv = envName; break; }
     }
 
     if (!tokenData.access_token) {
       return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(tokenData.error_description || tokenData.error || 'token_exchange_failed')}`);
     }
 
-    return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(tokenData.access_token)}&tradovate_refresh=${encodeURIComponent(tokenData.refresh_token || '')}&tradovate_expires=${tokenData.expires_in || 5400}&tradovate_env=demo`);
+    return res.redirect(`${frontendUrl}?tradovate_token=${encodeURIComponent(tokenData.access_token)}&tradovate_refresh=${encodeURIComponent(tokenData.refresh_token || '')}&tradovate_expires=${tokenData.expires_in || 5400}&tradovate_env=${resolvedEnv}`);
   } catch (err) {
     return res.redirect(`${frontendUrl}?tradovate_error=${encodeURIComponent(err.message)}`);
   }
