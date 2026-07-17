@@ -30,7 +30,7 @@ const router = Router();
 
 function parseSignal(body) {
   // Normalize field names (TradingView, TrendSpider, and custom formats)
-  const ticker = (body.ticker || body.symbol || body.instrument || '').toUpperCase().replace(/[0-9!@#$%^&*()]/g, '').trim();
+  const ticker = (body.ticker || body.symbol || body.instrument || '').toUpperCase().replace(/[!@#$%^&*()]/g, '').trim();
   const rawAction = (body.action || body.side || body.order_action || body.signal || '').toLowerCase().trim();
   const qty = parseInt(body.qty || body.quantity || body.contracts || body.size || body.order_qty || 1);
   const price = parseFloat(body.price || body.limit_price || 0);

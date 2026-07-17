@@ -121,7 +121,7 @@ export async function assignProxy({ provider = 'brightdata', region = 'us-east',
   if (!providerDef) throw new Error(`Unknown proxy provider: ${provider}`);
 
   // Generate a deterministic sticky session ID for this account
-  const sessionId = `pc_${accountId}_${Date.now().toString(36)}`;
+  const sessionId = `tv_${accountId}_${Date.now().toString(36)}`;
   const proxyConfig = providerDef.buildProxyUrl({ sessionId, region });
 
   if (!proxyConfig) {

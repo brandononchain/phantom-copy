@@ -74,12 +74,7 @@ export default function RootLayout({ children }) {
                 "Risk management with kill switch and daily loss limits",
                 "REST API and webhook integrations",
                 "40+ CME, COMEX, and NYMEX futures contracts"
-              ],
-              "aggregateRating": {
-                "@type": "AggregateRating",
-                "ratingValue": "4.8",
-                "reviewCount": "127"
-              }
+              ]
             })
           }}
         />

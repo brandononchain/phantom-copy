@@ -70,7 +70,7 @@ async function main() {
   ok(`Creds present. Zone="${ZONE}" User="${USER.slice(0,20)}..."`);
 
   // 3) Build proxy URL exactly like proxy-provider.js does
-  const sessionId = `pc_test_${Date.now().toString(36)}`;
+  const sessionId = `tv_test_${Date.now().toString(36)}`;
   const geo = REGION_MAP[REGION] || REGION_MAP['us-east'];
   let proxyUser = `${USER}-zone-${ZONE}-session-${sessionId}-country-${geo.country}`;
   if (geo.state) proxyUser += `-state-${geo.state}`;

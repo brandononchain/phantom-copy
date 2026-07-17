@@ -91,6 +91,7 @@ class ListenerManager {
         accountId: parseInt(credentials.brokerAccountId),
         proxyConfig: proxyConfig || { host: 'direct', port: 0, username: '', password: '' },
         db: { query },
+        isLive: (credentials.environment || 'demo').toLowerCase() === 'live',
       });
     } else if (platform === 'rithmic') {
       listener = new RithmicMasterListener({

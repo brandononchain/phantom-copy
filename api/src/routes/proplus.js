@@ -69,7 +69,7 @@ router.get('/keys', authRequired, requirePlan('api'), async (req, res) => {
 
 router.post('/keys', authRequired, requirePlan('api'), async (req, res) => {
   const { name, env } = req.body;
-  const prefix = `pc_${env || 'live'}_`;
+  const prefix = `tv_${env || 'live'}_`;
   const rawKey = prefix + crypto.randomBytes(30).toString('base64url');
   const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
   const keyPrefix = rawKey.slice(0, 20) + '...';

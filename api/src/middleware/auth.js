@@ -26,7 +26,7 @@ export function authRequired(req, res, next) {
 export async function apiKeyAuth(req, res, next) {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader?.startsWith('Bearer pc_')) {
+  if (!/^Bearer (tv|pc)_/.test(authHeader || '')) {
     return res.status(401).json({ error: 'missing_api_key', message: 'Provide API key as Bearer token' });
   }
 
@@ -67,7 +67,7 @@ export async function apiKeyAuth(req, res, next) {
 export async function flexAuth(req, res, next) {
   const authHeader = req.headers.authorization || '';
 
-  if (authHeader.startsWith('Bearer pc_')) {
+  if (/^Bearer (tv|pc)_/.test(authHeader)) {
     return apiKeyAuth(req, res, next);
   }
 
