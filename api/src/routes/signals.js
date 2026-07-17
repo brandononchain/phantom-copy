@@ -30,7 +30,9 @@ const router = Router();
 
 function parseSignal(body) {
   // Normalize field names (TradingView, TrendSpider, and custom formats)
-  const ticker = (body.ticker || body.symbol || body.instrument || '').toUpperCase().replace(/[!@#$%^&*()]/g, '').trim();
+  // Keep alphanumerics plus the ':' exchange-prefix and '!' continuous-contract
+  // markers so normalizeTicker() can resolve forms like CME_MINI:NQ1! and 6E.
+  const ticker = (body.ticker || body.symbol || body.instrument || '').toUpperCase().replace(/[^A-Z0-9:!]/g, '').trim();
   const rawAction = (body.action || body.side || body.order_action || body.signal || '').toLowerCase().trim();
   const qty = parseInt(body.qty || body.quantity || body.contracts || body.size || body.order_qty || 1);
   const price = parseFloat(body.price || body.limit_price || 0);
