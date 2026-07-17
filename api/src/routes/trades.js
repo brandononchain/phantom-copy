@@ -11,15 +11,17 @@ router.get('/', authRequired, async (req, res) => {
 
   let sql = `
     SELECT ce.*, a.label as master_label, a.platform,
-           json_agg(json_build_object(
+           COALESCE(json_agg(json_build_object(
              'id', cf.id, 'account_id', cf.follower_account_id,
+             'account_label', fa.label,
              'fill_price', cf.fill_price, 'slippage', cf.slippage_ticks,
              'latency_ms', cf.latency_ms, 'proxy_ip', cf.proxy_ip,
-             'status', cf.status
-           )) as fills
+             'status', cf.status, 'realized_pnl', cf.realized_pnl
+           )) FILTER (WHERE cf.id IS NOT NULL), '[]') as fills
     FROM copy_executions ce
     JOIN accounts a ON a.id = ce.master_account_id
     LEFT JOIN copy_fills cf ON cf.execution_id = ce.id
+    LEFT JOIN accounts fa ON fa.id = cf.follower_account_id
     WHERE ce.user_id = $1
   `;
   const params = [req.user.id];
