@@ -163,6 +163,10 @@ export function normalizeTicker(raw) {
   if (!raw) return null;
   let t = raw.toUpperCase().trim();
 
+  // Strip exchange prefix first so dated/continuous forms behind a prefix still
+  // normalize: CME_MINI:ESZ2026 -> ESZ2026, CME_MINI:NQ1! -> NQ1!
+  if (t.includes(':')) t = t.split(':').pop();
+
   // Strip continuous contract markers: NQ1! -> NQ
   t = t.replace(/[0-9]*!$/, '');
 
@@ -174,10 +178,6 @@ export function normalizeTicker(raw) {
   // Strip short year contract: ESH26 -> ES
   const shortYear = t.match(/^([A-Z0-9]+)([FGHJKMNQUVXZ])(\d{2})$/);
   if (shortYear) return shortYear[1];
-
-  // Strip exchange prefix: CME_MINI:NQ1! -> NQ
-  if (t.includes(':')) t = t.split(':').pop();
-  t = t.replace(/[0-9]*!$/, '');
 
   return t;
 }

@@ -49,8 +49,12 @@ function parseSignal(body) {
     action = 'OPEN'; side = 'Sell';
   } else if (['close', 'exit', 'flatten', 'close_all', 'exit_long', 'exit_short', 'buy_to_close', 'sell_to_close'].includes(rawAction)) {
     action = 'CLOSE';
-    // For close, determine side from sentiment or default
-    if (rawAction.includes('long') || sentiment === 'long') side = 'Sell'; // close long = sell
+    // Determine the closing order side. An explicit buy_/sell_ verb wins
+    // (buy_to_close covers a short, sell_to_close covers a long); otherwise
+    // infer from the long/short keyword or sentiment.
+    if (rawAction.startsWith('buy')) side = 'Buy';        // buy_to_close → close short
+    else if (rawAction.startsWith('sell')) side = 'Sell'; // sell_to_close → close long
+    else if (rawAction.includes('long') || sentiment === 'long') side = 'Sell'; // close long = sell
     else if (rawAction.includes('short') || sentiment === 'short') side = 'Buy'; // close short = buy
     else side = 'Sell'; // default close = sell (assumes long position)
   } else if (rawAction === 'reverse' || rawAction === 'flip') {
@@ -231,6 +235,7 @@ router.post('/:signalKey', async (req, res) => {
   if (!globalThis.__signalIdempotency) globalThis.__signalIdempotency = new Map();
   const idMap = globalThis.__signalIdempotency;
   if (idMap.has(idempotencyKey)) {
+    await logSignal({ userId, signalKeyId: key.id, status: 'DEDUPED', payload: req.body, signal });
     return res.status(200).json({ success: true, deduped: true, message: 'Duplicate signal ignored' });
   }
   idMap.set(idempotencyKey, receivedAt);
@@ -415,24 +420,28 @@ async function placeMasterOrder(master, signal, contractId) {
     return { orderId: data.orderId, platform: 'topstepx' };
   }
 
-  if (master.platform === 'tradovate') {
+  // NinjaTrader uses the Tradovate order API (same OAuth), so route it here too.
+  if (master.platform === 'tradovate' || master.platform === 'ninjatrader') {
     const isLive = creds.isLive === true || creds.environment === 'live';
     const baseUrl = isLive ? 'https://live.tradovateapi.com/v1' : 'https://demo.tradovateapi.com/v1';
+    const orderBody = {
+      accountSpec: master.broker_account_id,
+      accountId: parseInt(master.broker_account_id),
+      action: signal.side === 'Buy' ? 'Buy' : 'Sell',
+      symbol: contractId,
+      orderQty: signal.qty,
+      orderType: signal.orderType,
+      isAutomated: true,
+    };
+    if (signal.orderType === 'Limit' && signal.price) orderBody.price = signal.price;
+    if (signal.orderType === 'Stop' && signal.price) orderBody.stopPrice = signal.price;
     const orderRes = await fetch(`${baseUrl}/order/placeorder`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${creds.token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        accountSpec: master.broker_account_id,
-        accountId: parseInt(master.broker_account_id),
-        action: signal.side === 'Buy' ? 'Buy' : 'Sell',
-        symbol: contractId,
-        orderQty: signal.qty,
-        orderType: signal.orderType,
-        isAutomated: true,
-      }),
+      body: JSON.stringify(orderBody),
     });
     const orderData = await orderRes.json();
     if (orderRes.status === 401 || orderData.failureReason === 'Unauthorized') {
