@@ -58,6 +58,42 @@ function apiFetch(path, options = {}) {
   });
 };
 
+// Map a /api/trades row (copy_execution + fills) into the shape the trade tables render.
+function mapApiTrade(t) {
+  const fills = (t.fills || []).filter(f => f && f.account_id != null);
+  const filled = fills.filter(f => f.status === "filled");
+  const ts = new Date(t.timestamp);
+  const hh = Number.isNaN(ts.getTime()) ? "--:--:--" : ts.toTimeString().slice(0, 8);
+  const ms = Number.isNaN(ts.getTime()) ? "000" : String(ts.getMilliseconds()).padStart(3, "0");
+  const isClose = /clos|exit|flat/i.test(t.signal_type || "");
+  const pnl = fills.reduce((s, f) => s + (Number(f.realized_pnl) || 0), 0);
+  return {
+    id: t.id,
+    tMs: Number.isNaN(ts.getTime()) ? 0 : ts.getTime(),
+    time: hh,
+    ts: `${hh}.${ms}`,
+    mOid: t.master_order_id || `EX-${t.id}`,
+    symbol: t.contract_id || "—",
+    side: String(t.side || "").toLowerCase().startsWith("b") ? "LONG" : "SHORT",
+    qty: t.qty ?? 0,
+    entry: Number(t.master_price) || 0,
+    exit: null,
+    bracket: null,
+    copiedTo: filled.length,
+    pnl,
+    status: isClose ? "closed" : "open",
+    followers: fills.map(f => ({
+      name: f.account_label || `Account ${f.account_id}`,
+      ip: f.proxy_ip || "direct",
+      fp: Number(f.fill_price) || 0,
+      lat: f.latency_ms || 0,
+      slip: f.slippage || 0,
+      st: f.status || "filled",
+      fpnl: Number(f.realized_pnl) || 0,
+    })),
+  };
+}
+
 function AnimNum({ value, prefix = "", suffix = "", dec = 2 }) {
   const [d, setD] = useState(value);
   const r = useRef(value);
@@ -173,8 +209,26 @@ function Sidebar({ active, onNav, masterAccount, listenerState, currentPlan }) {
 }
 
 // ─── Master Listener Panel ───────────────────────────────────────────────────
-function MasterListenerPanel({ master, listenerState, listenerStage, events, positions, onStartListener, onStopListener }) {
+function fmtUptime(startedAt) {
+  if (!startedAt) return "—";
+  const ms = Date.now() - new Date(startedAt).getTime();
+  if (!(ms >= 0)) return "—";
+  const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+function MasterListenerPanel({ master, listenerState, listenerStage, session, events, positions, onStartListener, onStopListener }) {
+  // Tick once a minute so the live uptime stays current without a heavy timer.
+  const [, setNow] = useState(0);
+  useEffect(() => {
+    if (listenerState !== "listening") return;
+    const t = setInterval(() => setNow(n => n + 1), 30000);
+    return () => clearInterval(t);
+  }, [listenerState]);
   if (!master) return null;
+  const linked = !!session?.connected;
 
   return (
     <div className="ml-panel fade-in">
@@ -299,12 +353,12 @@ function MasterListenerPanel({ master, listenerState, listenerStage, events, pos
             </div>
           </div>
 
-          {/* WebSocket Stats */}
+          {/* WebSocket Stats — derived from the live server-side session */}
           <div className="ml-ws-stats">
-            <div className="ml-ws-stat"><span className="ml-ws-stat-label">WS UPTIME</span><span className="ml-ws-stat-val c-grn">4h 23m</span></div>
-            <div className="ml-ws-stat"><span className="ml-ws-stat-label">HEARTBEATS</span><span className="ml-ws-stat-val">847</span></div>
-            <div className="ml-ws-stat"><span className="ml-ws-stat-label">TOKEN REFRESH</span><span className="ml-ws-stat-val">in 42m</span></div>
-            <div className="ml-ws-stat"><span className="ml-ws-stat-label">RECONNECTS</span><span className="ml-ws-stat-val">0</span></div>
+            <div className="ml-ws-stat"><span className="ml-ws-stat-label">WS UPTIME</span><span className={cn("ml-ws-stat-val", session?.startedAt && "c-grn")}>{fmtUptime(session?.startedAt)}</span></div>
+            <div className="ml-ws-stat"><span className="ml-ws-stat-label">LINK</span><span className={cn("ml-ws-stat-val", linked ? "c-grn" : "c-red")}>{linked ? "Stable" : "Reconnecting"}</span></div>
+            <div className="ml-ws-stat"><span className="ml-ws-stat-label">OPEN ORDERS</span><span className="ml-ws-stat-val">{session?.openOrders ?? "—"}</span></div>
+            <div className="ml-ws-stat"><span className="ml-ws-stat-label">TOKEN REFRESH</span><span className="ml-ws-stat-val">Auto</span></div>
             <div className="ml-ws-stat"><span className="ml-ws-stat-label">PROXY IP</span><span className="ml-ws-stat-val" style={{ color: "#C4B5FD" }}>{master.ip}</span></div>
           </div>
         </div>
@@ -1102,7 +1156,7 @@ function MasterStatsBar({ accountId, balance, balanceDisplay }) {
   );
 }
 
-function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, events, positions, onStartListener, onStopListener, onDisconnect, onPause }) {
+function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, listenerSession, events, positions, onStartListener, onStopListener, onDisconnect, onPause }) {
   const master = accounts.find(a => a.role === "master");
   const followers = accounts.filter(a => a.role === "follower");
 
@@ -1149,7 +1203,7 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
                 {master.balance && <div className="acct-m-stat"><span className="acct-m-stat-label">BALANCE</span><span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 700, color: "#00E5A0" }}>${Number(master.balance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>}
               </div>
               <MasterStatsBar accountId={master.id} balance={master.balance} balanceDisplay={master.balanceDisplay} />
-              <MasterListenerPanel master={master} listenerState={listenerState} listenerStage={listenerStage} events={events} positions={positions} onStartListener={onStartListener} onStopListener={onStopListener} />
+              <MasterListenerPanel master={master} listenerState={listenerState} listenerStage={listenerStage} session={listenerSession} events={events} positions={positions} onStartListener={onStartListener} onStopListener={onStopListener} />
               <div className="master-actions-bar">
                 <div className="master-actions-left">
                   <span className="master-actions-hint">
@@ -1209,14 +1263,16 @@ function AccountsPage({ accounts, onOpenConnect, listenerState, listenerStage, e
 }
 
 // ─── Overview Page ───────────────────────────────────────────────────────────
-function OverviewPage({ accounts, onOpenConnect, listenerState, expandedTrade, setExpandedTrade }) {
+function OverviewPage({ accounts, trades = [], onOpenConnect, listenerState, expandedTrade, setExpandedTrade }) {
   const totalPnl = accounts.reduce((s, a) => s + (a.pnl || 0), 0);
   const totalBalance = accounts.reduce((s, a) => s + (a.balance ? Number(a.balance) : 0), 0);
   const followers = accounts.filter(a => a.role === "follower");
   const active = accounts.filter(a => a.status === "copying" || a.status === "connected").length;
-  const totalTrades = accounts.reduce((s, a) => s + (a.trades || 0), 0);
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const totalTrades = trades.filter(t => t.tMs >= startOfToday.getTime()).length;
   const avgLat = accounts.filter(a => a.latency).reduce((s, a) => s + a.latency, 0) / (accounts.filter(a => a.latency).length || 1);
   const platforms = new Set(accounts.map(a => a.platform)).size;
+  const recentTrades = trades.slice(0, 8);
 
   return (
     <div className="page fade-in">
@@ -1228,8 +1284,8 @@ function OverviewPage({ accounts, onOpenConnect, listenerState, expandedTrade, s
       </div>
 
       <div className="stats">
-        <div className="st-card"><div className="st-eye">TOTAL BALANCE</div><div className="st-val c-grn">{totalBalance > 0 ? <AnimNum value={totalBalance} prefix="$" /> : <span style={{color:"var(--t3)"}}>$0.00</span>}</div><div className="st-sub">{totalPnl >= 0 ? "+" : ""}{totalPnl !== 0 ? `$${Math.abs(totalPnl).toLocaleString(undefined,{minimumFractionDigits:2})} today` : "No trades yet"}</div></div>
-        <div className="st-card"><div className="st-eye">ACTIVE FOLLOWERS</div><div className="st-val c-blu"><AnimNum value={followers.length} dec={0} /></div><div className="st-sub">across {platforms || 0} platform{platforms !== 1 ? "s" : ""}</div></div>
+        <div className="st-card"><div className="st-eye">TOTAL BALANCE</div><div className="st-val c-grn">{totalBalance > 0 ? <AnimNum value={totalBalance} prefix="$" /> : <span style={{color:"var(--t3)"}}>$0.00</span>}</div><div className="st-sub">{totalPnl !== 0 ? `${totalPnl >= 0 ? "+" : "-"}$${Math.abs(totalPnl).toLocaleString(undefined,{minimumFractionDigits:2})} today` : "No trades yet"}</div></div>
+        <div className="st-card"><div className="st-eye">ACTIVE FOLLOWERS</div><div className="st-val"><AnimNum value={followers.length} dec={0} /></div><div className="st-sub">across {platforms || 0} platform{platforms !== 1 ? "s" : ""}</div></div>
         <div className="st-card"><div className="st-eye">TODAY'S TRADES</div><div className="st-val"><AnimNum value={totalTrades} dec={0} /></div><div className="st-sub">{active} accounts copying</div></div>
         <div className="st-card">
           <div className="st-eye">COPY LATENCY</div>
@@ -1244,7 +1300,14 @@ function OverviewPage({ accounts, onOpenConnect, listenerState, expandedTrade, s
         <div className="tbl-w"><table className="tbl">
           <thead><tr><th></th><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>Copied To</th><th>P&L</th></tr></thead>
           <tbody>
-            {INITIAL_TRADES.map((t, i) => [
+            {recentTrades.length === 0 && (
+              <tr className="tbl-empty"><td colSpan="9"><div className="tbl-empty-in">
+                <div className="tbl-empty-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                <div className="tbl-empty-t">No trades yet</div>
+                <div className="tbl-empty-s">Master trades replicate here in real time once your listener is running and your master account executes.</div>
+              </div></td></tr>
+            )}
+            {recentTrades.map((t, i) => [
                 <tr key={`row-${t.id}`} className="tbl-r tbl-r-click" style={{ animationDelay: `${i * 50}ms` }} onClick={() => setExpandedTrade(expandedTrade === t.id ? null : t.id)}>
                   <td style={{ width: 30 }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: expandedTrade === t.id ? "rotate(90deg)" : "none", transition: "transform 0.2s", opacity: t.followers?.length ? 1 : 0.2 }}><path d="M9 18l6-6-6-6"/></svg>
@@ -1285,14 +1348,14 @@ function OverviewPage({ accounts, onOpenConnect, listenerState, expandedTrade, s
 }
 
 // ─── Trade Log Page ──────────────────────────────────────────────────────────
-function TradeLogPage({ accounts }) {
+function TradeLogPage({ accounts, trades = [] }) {
   const [expanded, setExpanded] = useState(null);
   const [filterSymbol, setFilterSymbol] = useState("ALL");
   const [filterSide, setFilterSide] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
 
-  const symbols = [...new Set(INITIAL_TRADES.map(t => t.symbol))];
-  const filtered = INITIAL_TRADES.filter(t => {
+  const symbols = [...new Set(trades.map(t => t.symbol))];
+  const filtered = trades.filter(t => {
     if (filterSymbol !== "ALL" && t.symbol !== filterSymbol) return false;
     if (filterSide !== "ALL" && t.side !== filterSide) return false;
     if (filterStatus !== "ALL" && t.status !== filterStatus) return false;
@@ -1374,6 +1437,13 @@ function TradeLogPage({ accounts }) {
             <th>P&L</th>
           </tr></thead>
           <tbody>
+            {filtered.length === 0 && (
+              <tr className="tbl-empty"><td colSpan="11"><div className="tbl-empty-in">
+                <div className="tbl-empty-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                <div className="tbl-empty-t">{trades.length > 0 ? "No matching executions" : "No executions yet"}</div>
+                <div className="tbl-empty-s">{trades.length > 0 ? "No trades match the current filters. Clear a filter to see more." : "Every copied trade lands here with per-follower fill receipts, latency, slippage, and the IP each order routed through."}</div>
+              </div></td></tr>
+            )}
             {filtered.map((t, i) => [
               <tr key={`r-${t.id}`} className="tbl-r tbl-r-click" style={{ animationDelay: `${i * 40}ms` }} onClick={() => setExpanded(expanded === t.id ? null : t.id)}>
                 <td>
@@ -1531,7 +1601,7 @@ function ProxyPage({ accounts, onRotateProxy, onTestProxy, onRotateAll }) {
           );
         })}
       </div>
-      <div className="card-sh"><div className="card-in"><div className="card-hd"><h2 className="card-t">Provider Pool</h2></div><div className="prov-grid">{PROXY_PROVIDERS.map(p => { const c = accounts.filter(a => a.proxy === p.id).length; return (<div key={p.id} className="prov-item" style={{ opacity: p.disabled ? 0.4 : 1 }}><div className="prov-name">{p.name}{p.disabled && <span style={{ marginLeft: 6, fontSize: 9, color: '#888' }}>SOON</span>}</div><div className="prov-count">{c} assigned</div><div className="prov-bar-bg"><div className="prov-bar" style={{ width: `${(c / (accounts.length || 1)) * 100}%` }} /></div></div>); })}</div></div></div>
+      <div className="card-sh"><div className="card-in"><div className="card-hd"><h2 className="card-t">Provider Pool</h2></div><div className="prov-grid">{PROXY_PROVIDERS.map(p => { const c = accounts.filter(a => a.proxy === p.id).length; const soon = p.disabled && c === 0; return (<div key={p.id} className="prov-item" style={{ opacity: soon ? 0.4 : 1 }}><div className="prov-name">{p.name}{soon && <span style={{ marginLeft: 6, fontSize: 9, color: '#888' }}>SOON</span>}</div><div className="prov-count">{c} assigned</div><div className="prov-bar-bg"><div className="prov-bar" style={{ width: `${(c / (accounts.length || 1)) * 100}%` }} /></div></div>); })}</div></div></div>
     </div>
   );
 }
@@ -3089,6 +3159,8 @@ export default function App({ initialMode }) {
 
   const [page, setPage] = useState("overview");
   const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
+  const [trades, setTrades] = useState([]);
+  const [listenerSession, setListenerSession] = useState(null); // active master session telemetry
   const [showConnect, setShowConnect] = useState(false);
   const [oauthResume, setOauthResume] = useState(null); // { token, env, platform }
   const [expandedTrade, setExpandedTrade] = useState(null);
@@ -3143,11 +3215,19 @@ export default function App({ initialMode }) {
             }
           }).catch(() => {});
 
+          // Load copy execution history for the Overview and Trade Log tables
+          apiFetch("/api/trades?limit=100").then(r => r.ok ? r.json() : null).then(td => {
+            if (td?.trades) setTrades(td.trades.map(mapApiTrade));
+          }).catch(() => {});
+
           // Check if a listener is already running server-side
           apiFetch("/api/listeners/status").then(r => r.ok ? r.json() : null).then(status => {
             if (status?.activeSessions > 0) {
               setListenerState("listening");
               setListenerStage("connected");
+              setListenerSession(status.sessions?.[0] || null);
+            } else {
+              setListenerSession(null);
             }
           }).catch(() => {});
 
@@ -3345,13 +3425,13 @@ export default function App({ initialMode }) {
 
   const renderPage = () => {
     switch (page) {
-      case "overview": return <OverviewPage accounts={accounts} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} expandedTrade={expandedTrade} setExpandedTrade={setExpandedTrade} />;
-      case "accounts": return <AccountsPage accounts={accounts} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} listenerStage={listenerStage} events={events} positions={positions} onStartListener={startListener} onStopListener={stopListener} onDisconnect={disconnectAccount} onPause={pauseAccount} />;
+      case "overview": return <OverviewPage accounts={accounts} trades={trades} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} expandedTrade={expandedTrade} setExpandedTrade={setExpandedTrade} />;
+      case "accounts": return <AccountsPage accounts={accounts} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} listenerStage={listenerStage} listenerSession={listenerSession} events={events} positions={positions} onStartListener={startListener} onStopListener={stopListener} onDisconnect={disconnectAccount} onPause={pauseAccount} />;
       case "proxies": return <ProxyPage accounts={accounts} onRotateProxy={rotateProxy} onTestProxy={testProxy} onRotateAll={rotateAllProxies} />;
-      case "trades": return <TradeLogPage accounts={accounts} />;
+      case "trades": return <TradeLogPage accounts={accounts} trades={trades} />;
       case "settings": return <SettingsPage accounts={accounts} currentPlan={currentPlan} />;
       case "profile": return <ProfilePage onSignOut={handleSignOut} currentPlan={currentPlan} onPlanChange={setCurrentPlan} user={user} />;
-      default: return <OverviewPage accounts={accounts} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} expandedTrade={expandedTrade} setExpandedTrade={setExpandedTrade} />;
+      default: return <OverviewPage accounts={accounts} trades={trades} onOpenConnect={() => setShowConnect(true)} listenerState={listenerState} expandedTrade={expandedTrade} setExpandedTrade={setExpandedTrade} />;
     }
   };
 
@@ -3698,6 +3778,11 @@ body::-webkit-scrollbar,html::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .tbl-r{animation:fsu 0.5s var(--ease) both;transition:background 0.2s}.tbl-r:hover{background:rgba(255,255,255,0.02)}
 .tbl-r-click{cursor:pointer}
 .tbl-expand td{padding:0!important;background:rgba(99,102,241,0.03)}
+.tbl-empty td{padding:0!important;border-bottom:none!important}
+.tbl-empty-in{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:48px 24px;text-align:center}
+.tbl-empty-ic{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.03);border:1px solid var(--bdr);color:var(--t3);margin-bottom:4px}
+.tbl-empty-t{font-size:13px;font-weight:600;color:var(--t2)}
+.tbl-empty-s{font-size:12px;color:var(--t3);max-width:340px;line-height:1.5}
 .expand-content{padding:16px 24px 20px 46px}
 .expand-title{font-size:10px;font-weight:600;letter-spacing:0.1em;color:var(--t3);text-transform:uppercase;margin-bottom:10px}
 .expand-fills{display:flex;flex-direction:column;gap:6px}
