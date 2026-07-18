@@ -84,49 +84,77 @@ const CYCLES = {
   ag_wheat:        [2,4,6,8,11],         // H,K,N,U,Z
 };
 
+// ── Expiry model per product family ──────────────────────────────────────────
+// Different products expire on very different schedules, and energy/metals stop
+// trading in the month BEFORE the delivery (contract) month. Emitting the wrong
+// month gets the order rejected near roll, so we approximate each family's last
+// trade date (good to a few days — the roll buffer absorbs the rest).
+
+function thirdFriday(year, monthIdx) {
+  const firstDow = new Date(year, monthIdx, 1).getDay();
+  const firstFri = firstDow <= 5 ? (5 - firstDow + 1) : (12 - firstDow + 1);
+  return new Date(year, monthIdx, firstFri + 14);
+}
+
+// A calendar day in the contract month (monthDelta 0) or a neighbouring month
+// (e.g. -1 for energy/metals that expire the month before). Date normalizes
+// month/day overflow, including across year boundaries.
+function dayInMonth(year, monthIdx, monthDelta, day) {
+  return new Date(year, monthIdx + monthDelta, day);
+}
+
+// Which expiry rule applies to a contract, derived from its exchange/cycle.
+function expiryRuleFor(ticker, spec) {
+  if (spec.exchange === 'COMEX') return 'metal_eom';                    // GC/SI/HG + micros: first notice ~ last bd of prior month
+  if (spec.exchange === 'NYMEX') return (ticker === 'CL' || ticker === 'MCL') ? 'energy_cl' : 'energy_prior'; // CL vs NG/RB/HO
+  if (spec.cycle === 'ag_corn' || spec.cycle === 'ag_soy' || spec.cycle === 'ag_wheat') return 'ag_mid';
+  if (ticker === 'LE' || ticker === 'HE') return 'livestock';          // expire near end of contract month
+  return 'friday3';                                                     // equity index, FX, rates (quarterly)
+}
+
+// Approximate last-trade date for a contract labelled (year, monthIdx).
+function expiryDate(rule, year, monthIdx) {
+  switch (rule) {
+    case 'friday3':      return thirdFriday(year, monthIdx);
+    case 'ag_mid':       return dayInMonth(year, monthIdx, 0, 14);   // ~ business day before the 15th
+    case 'livestock':    return dayInMonth(year, monthIdx, 0, 28);   // ~ last business day of contract month
+    case 'energy_cl':    return dayInMonth(year, monthIdx, -1, 20);  // CL: ~3 bd before the 25th of the prior month
+    case 'energy_prior': return dayInMonth(year, monthIdx, -1, 26);  // NG/RB/HO: last trade in the prior month
+    case 'metal_eom':    return dayInMonth(year, monthIdx, -1, 27);  // metals: first notice ~ last bd of prior month
+    default:             return thirdFriday(year, monthIdx);
+  }
+}
+
 // ── Get the front month contract ─────────────────────────────────────────────
-// Rolls to next contract 8 calendar days before the 3rd Friday of expiry month
-// for equity index futures. For energy/metals, rolls ~3 business days before.
+// Returns the first contract in the product's cycle whose roll date is still in
+// the future, using the product-specific expiry above (not equity timing for all).
 
 export function getFrontMonth(ticker, referenceDate = new Date()) {
   const spec = CONTRACTS[ticker];
   if (!spec) return null;
 
-  const cycleKey = spec.cycle;
-  const cycle = CYCLES[cycleKey] || CYCLES.quarterly;
+  const cycle = CYCLES[spec.cycle] || CYCLES.quarterly;
+  const rule = expiryRuleFor(ticker, spec);
+  const rollDays = rule === 'friday3' ? 8 : 5; // roll this many calendar days before expiry
 
   const now = referenceDate;
-  const currentMonth = now.getMonth(); // 0-indexed
-  const currentYear = now.getFullYear();
-  const dayOfMonth = now.getDate();
+  const cM = now.getMonth();
+  const cY = now.getFullYear();
 
-  // Find the current or next contract month
-  // Roll logic: switch to next contract 8 days before 3rd Friday of expiry month
   for (let offset = 0; offset < 24; offset++) {
-    const checkMonth = (currentMonth + offset) % 12;
-    const checkYear = currentYear + Math.floor((currentMonth + offset) / 12);
+    const m = (cM + offset) % 12;
+    const y = cY + Math.floor((cM + offset) / 12);
+    if (!cycle.includes(m)) continue;
 
-    if (!cycle.includes(checkMonth)) continue;
-
-    // Calculate 3rd Friday of this month
-    const firstDay = new Date(checkYear, checkMonth, 1).getDay();
-    const firstFriday = firstDay <= 5 ? (5 - firstDay + 1) : (12 - firstDay + 1);
-    const thirdFriday = firstFriday + 14;
-    const rollDate = thirdFriday - 8; // Roll 8 calendar days before
-
-    // If we're in the expiry month and past the roll date, skip to next
-    if (offset === 0 && dayOfMonth >= rollDate) continue;
-
-    return {
-      month: checkMonth,
-      year: checkYear,
-      monthCode: MONTH_CODES[checkMonth],
-      yearShort: checkYear % 100,
-    };
+    const rollBy = expiryDate(rule, y, m);
+    rollBy.setDate(rollBy.getDate() - rollDays);
+    if (now < rollBy) {
+      return { month: m, year: y, monthCode: MONTH_CODES[m], yearShort: y % 100 };
+    }
   }
 
-  // Fallback
-  return { month: currentMonth, year: currentYear, monthCode: MONTH_CODES[currentMonth], yearShort: currentYear % 100 };
+  // Fallback (should not happen within a 24-month horizon)
+  return { month: cM, year: cY, monthCode: MONTH_CODES[cM], yearShort: cY % 100 };
 }
 
 // ── Resolve to TopStepX contract ID ──────────────────────────────────────────
