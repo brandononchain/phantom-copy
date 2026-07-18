@@ -13,9 +13,10 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { query } from '../db/pool.js';
 import { copyEngine } from '../services/copy-engine.js';
-import { resolveContractId, normalizeTicker, getContractInfo } from '../services/contracts.js';
+import { resolveContractId, normalizeTicker } from '../services/contracts.js';
 import { authRequired } from '../middleware/auth.js';
 import { encryptJSON, decryptJSON } from '../services/crypto.js';
+import { computeTargetOrder, resolveNetPosition, applyFill } from '../services/positions.js';
 
 const router = Router();
 
@@ -270,20 +271,40 @@ router.post('/:signalKey', async (req, res) => {
 
   // 4. Resolve contract ID for the master's platform
   const normalizedTicker = normalizeTicker(signal.ticker) || signal.ticker;
-  const contractInfo = getContractInfo(normalizedTicker);
   const contractId = resolveContractId(normalizedTicker, master.platform);
 
-  // 5. Place order on master account (with token re-auth on 401)
-  let masterOrderResult;
-  try {
-    masterOrderResult = await placeMasterOrder(master, signal, contractId);
-  } catch (err) {
-    await logSignal({ userId, signalKeyId: key.id, masterAccountId: master.id, status: 'MASTER_ORDER_FAILED', payload: req.body, error: err.message, signal });
-    return res.status(500).json({
-      error: 'Master order failed',
-      message: err.message,
-      signal: { ticker: signal.ticker, action: signal.action, side: signal.side, qty: signal.qty },
-    });
+  // 4b. Position-aware order. CLOSE flattens to zero, REVERSE flips, OPEN adds.
+  //     For the master we reconcile against the broker's live position when
+  //     possible (the trader may also act manually), falling back to our ledger.
+  let masterCreds = {};
+  try { masterCreds = decryptJSON(master.credentials_encrypted) || {}; } catch { /* plaintext-less */ }
+  const masterNet = await resolveNetPosition({
+    accountId: master.id, contractId, platform: master.platform,
+    creds: masterCreds, brokerAccountId: master.broker_account_id, preferBroker: true,
+  }).catch(() => 0);
+  const masterTarget = computeTargetOrder(signal.action, masterNet, signal.side, signal.qty);
+
+  // 5. Place order on master account (skip when already at the intended position)
+  let masterOrderResult = null;
+  if (masterTarget) {
+    const effective = {
+      ...signal,
+      side: masterTarget.side,
+      qty: masterTarget.qty,
+      // Flatten/flip always executes at market so the position closes immediately.
+      orderType: (signal.action === 'CLOSE' || signal.action === 'REVERSE') ? 'Market' : signal.orderType,
+    };
+    try {
+      masterOrderResult = await placeMasterOrder(master, effective, contractId);
+      await applyFill(master.id, contractId, masterTarget.side, masterTarget.qty).catch(() => {});
+    } catch (err) {
+      await logSignal({ userId, signalKeyId: key.id, masterAccountId: master.id, status: 'MASTER_ORDER_FAILED', payload: req.body, error: err.message, signal });
+      return res.status(500).json({
+        error: 'Master order failed',
+        message: err.message,
+        signal: { ticker: signal.ticker, action: signal.action, side: signal.side, qty: signal.qty },
+      });
+    }
   }
 
   // 6. Trigger copy to followers via the copy engine
@@ -306,12 +327,12 @@ router.post('/:signalKey', async (req, res) => {
 
   const latency = Date.now() - receivedAt;
 
-  // 7. Log the successful signal
+  // 7. Log the signal (NOOP when the master was already at the intended position)
   await logSignal({
     userId,
     signalKeyId: key.id,
     masterAccountId: master.id,
-    status: 'EXECUTED',
+    status: masterTarget ? 'EXECUTED' : 'NOOP',
     payload: req.body,
     signal,
     latencyMs: latency,
@@ -321,6 +342,7 @@ router.post('/:signalKey', async (req, res) => {
   // 8. Return success
   res.json({
     success: true,
+    noop: !masterTarget,
     signal: {
       ticker: signal.ticker,
       action: signal.action,
@@ -331,6 +353,7 @@ router.post('/:signalKey', async (req, res) => {
     master: {
       platform: master.platform,
       orderId: masterOrderResult?.orderId,
+      order: masterTarget ? { side: masterTarget.side, qty: masterTarget.qty } : null,
     },
     latency: `${latency}ms`,
     timestamp: new Date().toISOString(),

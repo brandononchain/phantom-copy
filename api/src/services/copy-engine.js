@@ -12,6 +12,7 @@ import { RithmicCopyClient } from '../listeners/rithmic-listener.js';
 import { createProxyAgent } from './proxy-provider.js';
 import { deliverWebhook } from './webhook-delivery.js';
 import { decryptJSON } from './crypto.js';
+import { computeTargetOrder, getLedgerPosition, applyFill } from './positions.js';
 
 export class CopyEngine extends EventEmitter {
   constructor() {
@@ -245,18 +246,28 @@ export class CopyEngine extends EventEmitter {
         adjustedQty = override.max_qty;
       }
 
+      // Position-aware: CLOSE flattens THIS follower's position, REVERSE flips it,
+      // OPEN adds. Followers are only ever traded by us, so the ledger is exact.
+      const net = await getLedgerPosition(follower.id, signal.contractId).catch(() => 0);
+      const target = computeTargetOrder(signal.action, net, signal.side, adjustedQty);
+      if (!target) {
+        console.log(`[COPY-ENGINE] Follower ${follower.label || follower.id}: already at target for ${signal.action} — no order`);
+        return { success: true, noop: true };
+      }
+
       // Get or create copy client for this follower
       const client = await this.getFollowerClient(follower);
 
-      // Place the order
+      // Place the position-aware order
       const result = await client.placeOrder({
         contractId: signal.contractId,
-        side: signal.side,
-        qty: adjustedQty,
+        side: target.side,
+        qty: target.qty,
         orderType: 'Market',
       });
 
       const latency = Date.now() - start;
+      await applyFill(follower.id, signal.contractId, target.side, target.qty).catch(() => {});
 
       // Log the fill
       await query(
@@ -265,7 +276,7 @@ export class CopyEngine extends EventEmitter {
         [executionId, follower.id, signal.price || 0, 0, latency, follower.ip_address || 'direct']
       );
 
-      console.log(`[COPY-ENGINE] Filled follower ${follower.label || follower.id}: ${signal.side} ${adjustedQty} in ${latency}ms`);
+      console.log(`[COPY-ENGINE] Filled follower ${follower.label || follower.id}: ${signal.action} -> ${target.side} ${target.qty} in ${latency}ms`);
 
       return { success: true, orderId: result.orderId, latency };
 

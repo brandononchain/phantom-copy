@@ -212,6 +212,24 @@ const migrations = [
       ALTER TABLE users DROP COLUMN IF EXISTS trial_plan;
     `,
   },
+  {
+    id: '012_positions',
+    up: `
+      -- Per-account/per-contract net-position ledger for position-aware
+      -- CLOSE / REVERSE signals. net_qty is signed: >0 long, <0 short.
+      CREATE TABLE IF NOT EXISTS positions (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
+        contract_id VARCHAR(100) NOT NULL,
+        net_qty INTEGER NOT NULL DEFAULT 0,
+        avg_price DECIMAL(20,8),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(account_id, contract_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_positions_account ON positions(account_id);
+    `,
+    down: `DROP TABLE IF EXISTS positions;`,
+  },
 ];
 
 export async function runMigrations(pool) {
