@@ -89,42 +89,72 @@ export async function getBrokerPosition(platform, creds, brokerAccountId, contra
       const list = data?.positions || (Array.isArray(data) ? data : null);
       if (!Array.isArray(list)) return null;
       // ProjectX: type 1 = Long, 2 = Short; size is unsigned. Match by contractId.
-      let net = 0, matched = false;
+      // No matching position = flat (0), which is itself authoritative.
+      let net = 0;
       for (const p of list) {
         const pid = String(p.contractId ?? p.contractCode ?? p.symbol ?? '');
         if (pid && contractId && !pid.includes(contractId) && !contractId.includes(pid)) continue;
         const size = Math.abs(Number(p.size ?? p.netPos ?? p.quantity ?? 0));
         const dir = (p.type === 2 || p.side === 'Sell' || Number(p.netPos) < 0) ? -1 : 1;
-        net += dir * size; matched = true;
+        net += dir * size;
       }
-      return matched || Array.isArray(list) ? net : null;
+      return net;
     }
 
     if (platform === 'tradovate' || platform === 'ninjatrader') {
       const isLive = creds.isLive === true || creds.environment === 'live';
       const base = isLive ? 'https://live.tradovateapi.com/v1' : 'https://demo.tradovateapi.com/v1';
+      // Tradovate positions key by numeric contractId, so resolve our symbol
+      // (e.g. ESU26) to Tradovate's contract id first. If we can't resolve it we
+      // return null so the caller safely falls back to the ledger.
+      const brokerContractId = opts.brokerContractId ?? await resolveTradovateContractId(base, creds.token, contractId);
+      if (brokerContractId == null) return null;
       const r = await fetch(`${base}/position/list`, {
         headers: { 'Authorization': `Bearer ${creds.token}` },
       });
       if (!r.ok) return null;
       const list = await r.json().catch(() => null);
       if (!Array.isArray(list)) return null;
-      // Tradovate positions key by numeric contractId; map via opts.contractIdMap
-      // when provided, otherwise we can't safely match a symbol → fall back.
-      const wantId = opts.brokerContractId;
-      if (wantId == null) return null;
+      const acct = parseInt(brokerAccountId);
       let net = 0;
       for (const p of list) {
-        if (String(p.contractId) !== String(wantId)) continue;
+        if (Number(p.contractId) !== Number(brokerContractId)) continue;
+        if (!Number.isNaN(acct) && p.accountId != null && Number(p.accountId) !== acct) continue;
         net += Number(p.netPos ?? 0);
       }
-      return net;
+      return net; // no matching position = flat
     }
   } catch {
     return null;
   }
   return null;
 }
+
+// ── Tradovate symbol → numeric contract id ────────────────────────────────────
+// Positions and orders from /position/list reference a numeric contractId, but
+// we work in symbols (ESU26). Resolve via /contract/find and cache the mapping
+// (a contract name always maps to the same id). Never caches failures.
+const _tvContractCache = new Map(); // name -> numeric id
+
+export async function resolveTradovateContractId(base, token, name) {
+  if (!name) return null;
+  if (_tvContractCache.has(name)) return _tvContractCache.get(name);
+  try {
+    const r = await fetch(`${base}/contract/find?name=${encodeURIComponent(name)}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!r.ok) return null;
+    const data = await r.json().catch(() => null);
+    const id = data?.id ?? (Array.isArray(data) ? data[0]?.id : null);
+    if (id != null) { _tvContractCache.set(name, id); return id; }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Test/ops helper: clear the contract-id cache.
+export function _clearTradovateContractCache() { _tvContractCache.clear(); }
 
 // Resolve the net position to act on: broker-authoritative when available
 // (reconciling the ledger), otherwise the ledger. Followers pass
