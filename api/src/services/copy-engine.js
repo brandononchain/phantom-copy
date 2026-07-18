@@ -12,7 +12,7 @@ import { RithmicCopyClient } from '../listeners/rithmic-listener.js';
 import { createProxyAgent } from './proxy-provider.js';
 import { deliverWebhook } from './webhook-delivery.js';
 import { decryptJSON } from './crypto.js';
-import { computeTargetOrder, getLedgerPosition, applyFill } from './positions.js';
+import { computeTargetOrder, applyFill, resolveNetPosition } from './positions.js';
 
 export class CopyEngine extends EventEmitter {
   constructor() {
@@ -247,8 +247,17 @@ export class CopyEngine extends EventEmitter {
       }
 
       // Position-aware: CLOSE flattens THIS follower's position, REVERSE flips it,
-      // OPEN adds. Followers are only ever traded by us, so the ledger is exact.
-      const net = await getLedgerPosition(follower.id, signal.contractId).catch(() => 0);
+      // OPEN adds. CLOSE/REVERSE resolve the follower's net broker-authoritatively
+      // (falling back to the ledger); OPEN is additive and needs no position read.
+      let net = 0;
+      if (signal.action === 'CLOSE' || signal.action === 'REVERSE') {
+        let fCreds = {};
+        try { fCreds = decryptJSON(follower.credentials_encrypted) || {}; } catch { /* plaintext-less */ }
+        net = await resolveNetPosition({
+          accountId: follower.id, contractId: signal.contractId, platform: follower.platform,
+          creds: fCreds, brokerAccountId: follower.broker_account_id, preferBroker: true,
+        }).catch(() => 0);
+      }
       const target = computeTargetOrder(signal.action, net, signal.side, adjustedQty);
       if (!target) {
         console.log(`[COPY-ENGINE] Follower ${follower.label || follower.id}: already at target for ${signal.action} — no order`);
