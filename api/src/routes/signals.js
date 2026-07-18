@@ -17,6 +17,7 @@ import { resolveContractId, normalizeTicker } from '../services/contracts.js';
 import { authRequired } from '../middleware/auth.js';
 import { encryptJSON, decryptJSON } from '../services/crypto.js';
 import { computeTargetOrder, resolveNetPosition, applyFill } from '../services/positions.js';
+import { enqueueCopySignal } from '../services/copy-queue.js';
 
 const router = Router();
 
@@ -320,9 +321,10 @@ router.post('/:signalKey', async (req, res) => {
     source: 'tradingview_webhook',
   };
 
-  // Fire and forget - the copy engine handles replication async
-  copyEngine.handleCopySignal(copySignal, master.id).catch(err => {
-    console.error('[SIGNAL] Copy engine error:', err.message);
+  // Fire and forget — enqueue for the worker when Redis is configured (retry,
+  // backoff, rate-limit, cross-process), otherwise it executes inline.
+  enqueueCopySignal(copySignal, master.id, copyEngine).catch(err => {
+    console.error('[SIGNAL] Copy enqueue error:', err.message);
   });
 
   const latency = Date.now() - receivedAt;
