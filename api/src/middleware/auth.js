@@ -37,7 +37,7 @@ export async function apiKeyAuth(req, res, next) {
     const result = await query(
       `SELECT ak.*, u.plan FROM api_keys ak
        JOIN users u ON u.id = ak.user_id
-       WHERE ak.key_hash = $1 AND ak.status = 'active'`,
+       WHERE ak.key_hash = $1 AND ak.status = 'active' AND ak.env <> 'signal'`,
       [keyHash]
     );
 

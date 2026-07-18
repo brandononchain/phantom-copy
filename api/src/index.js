@@ -57,6 +57,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+// Redact signal keys from access logs — they travel in the URL and are the sole
+// credential for the webhook, so never write them to stdout/proxy logs verbatim.
+morgan.token('url', (req) => (req.originalUrl || req.url || '').replace(/(\/api\/signals\/)[A-Za-z0-9_-]+/, '$1tv_***'));
 app.use(morgan(config.isDev ? 'dev' : 'combined'));
 app.use(cookieParser());
 
@@ -64,13 +67,27 @@ app.use(cookieParser());
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 
-// Rate limiting
+// Rate limiting. The webhook is exempted from the shared per-IP limiter because
+// TradingView egresses all customers' alerts from a handful of IPs — one global
+// budget would drop legitimate signals under load. It gets its own per-key limiter.
 app.use('/api/', rateLimit({
   windowMs: 15 * 60 * 1000,
   max: config.isDev ? 1000 : 600,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => (req.originalUrl || '').startsWith('/api/signals/'),
 }));
+
+// Per-signal-key limiter for the webhook (keyed by URL, which carries the key).
+const signalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: config.isDev ? 1000 : 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.originalUrl || req.ip,
+  validate: false,
+  message: { error: 'Signal rate limit exceeded — max 300/min per key' },
+});
 
 // ── Health ────────────────────────────────────────────────────────────────────
 
@@ -128,7 +145,9 @@ app.use('/api/brokers', brokerRoutes);
 app.use('/api/listeners', listenerRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/signals', signalRoutes);
+// Accept text/plain and header-less bodies too — TradingView alerts default to
+// text/plain, which the global application/json parser would leave unparsed.
+app.use('/api/signals', signalLimiter, express.json({ type: () => true, limit: '1mb' }), signalRoutes);
 
 // ── 404 ──────────────────────────────────────────────────────────────────────
 
